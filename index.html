@@ -430,5 +430,122 @@
 
   <script src="js/gcse-data.js"></script>
   <script src="js/app.js"></script>
+  <!-- ═══ FIREBASE CLOUD SYNC ═══ -->
+<script type="module">
+  import { initializeApp }
+    from "https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js";
+  import { getFirestore, doc, setDoc, getDoc }
+    from "https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore.js";
+  import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged }
+    from "https://www.gstatic.com/firebasejs/10.7.0/firebase-auth.js";
+
+  // ─── YOUR CONFIG FROM FIREBASE CONSOLE ───
+  const firebaseConfig = {
+  apiKey: "AIzaSyDWBU7TfHB0fJvqEY4VT_9vtQ8VHqyvIf8",
+  authDomain: "habitforge-gcse.firebaseapp.com",
+  projectId: "habitforge-gcse",
+  storageBucket: "habitforge-gcse.firebasestorage.app",
+  messagingSenderId: "344201835050",
+  appId: "1:344201835050:web:b7e11792d6c5adff370953",
+  measurementId: "G-D8RYCC1DJY"
+};
+  // ─────────────────────────────────────────
+
+  const app  = initializeApp(firebaseConfig);
+  const db   = getFirestore(app);
+  const auth = getAuth(app);
+  const provider = new GoogleAuthProvider();
+  let fbUid = null;
+
+  // Load cloud state into the app
+  async function fbLoad(uid) {
+    try {
+      const snap = await getDoc(doc(db, 'gcse_users', uid));
+      if (snap.exists()) {
+        Object.assign(S, snap.data());
+        renderDashboard();
+        renderHabits();
+        renderTodos();
+        updateXPDisplay();
+        updateStreakDisplay();
+        console.log('[HabitForge] ☁ Cloud data loaded');
+      } else {
+        console.log('[HabitForge] No cloud data yet — starting fresh');
+      }
+    } catch(e) {
+      console.warn('[HabitForge] Cloud load failed:', e);
+    }
+  }
+
+  // Push local state up to Firestore
+  async function fbSave() {
+    if (!fbUid) return;
+    try {
+      await setDoc(doc(db, 'gcse_users', fbUid), JSON.parse(JSON.stringify(S)));
+    } catch(e) {
+      console.warn('[HabitForge] Cloud save failed:', e);
+    }
+  }
+
+  // Override the app's local save() so every save also goes to cloud
+  document.addEventListener('DOMContentLoaded', () => {
+    const _localSave = window.save;
+    if (typeof _localSave === 'function') {
+      window.save = function() {
+        _localSave();
+        fbSave();
+      };
+    }
+  });
+
+  // Watch auth state — auto sign-in if user already authed before
+  onAuthStateChanged(auth, async (user) => {
+    if (user) {
+      fbUid = user.uid;
+      if (syncBtn) {
+        syncBtn.textContent = '☁ ' + (user.displayName?.split(' ')[0] || 'Synced');
+        syncBtn.style.borderColor = 'var(--accent-3)';
+        syncBtn.style.color = 'var(--accent-3)';
+      }
+      await fbLoad(user.uid);
+    } else {
+      fbUid = null;
+      if (syncBtn) {
+        syncBtn.textContent = '☁ Sign in to sync';
+        syncBtn.style.borderColor = '';
+        syncBtn.style.color = '';
+      }
+    }
+  });
+
+  // Add a sync button to the sidebar
+  const syncBtn = document.createElement('button');
+  syncBtn.className = 'btn-ghost';
+  syncBtn.style.cssText = 'margin: 6px 16px 12px; font-size:10px; letter-spacing:1px; width: calc(100% - 32px);';
+  syncBtn.textContent = '☁ Sign in to sync';
+  syncBtn.addEventListener('click', async () => {
+    if (fbUid) {
+      // Already signed in — force a manual save
+      await fbSave();
+      syncBtn.textContent = '✓ Saved to cloud';
+      setTimeout(() => {
+        syncBtn.textContent = '☁ ' + (auth.currentUser?.displayName?.split(' ')[0] || 'Synced');
+      }, 2000);
+    } else {
+      try {
+        await signInWithPopup(auth, provider);
+      } catch(e) {
+        console.error('Sign-in failed:', e);
+        alert('Sign-in failed. Make sure your Cloudflare domain is added to Firebase Authorised Domains (Step 12e).');
+      }
+    }
+  });
+
+  // Append button to sidebar after DOM is ready
+  document.addEventListener('DOMContentLoaded', () => {
+    const sidebar = document.querySelector('.sidebar');
+    if (sidebar) sidebar.appendChild(syncBtn);
+  });
+</script>
 </body>
 </html>
