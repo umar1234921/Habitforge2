@@ -18,6 +18,15 @@ const S = {
   deepWorkMins: 0,
   pomoSettings: { work: 25, short: 5, long: 15 },
 };
+// ─── QUOTES ────────────────────────────────────────────────
+const QUOTES = [
+  ["The secret of getting ahead is getting started.", "Mark Twain"],
+  ["Success is the sum of small efforts, repeated day in and day out.", "Robert Collier"],
+  ["Don't stop when you're tired. Stop when you're done.", "David Goggins"],
+  ["Discipline equals freedom.", "Jocko Willink"],
+  ["Amateurs sit and wait for inspiration, the rest of us just get up and go to work.", "Stephen King"]
+];
+
 
 // ─── UTIL ────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
