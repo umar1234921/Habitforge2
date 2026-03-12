@@ -156,7 +156,7 @@ const GCSE_SUBJECTS = {
     color: "#84cc16",
     icon: "🧬",
     exams: [
-      { paper: "Paper 1 (Topics 1–4)", date: "2026-05-12", time: "PM" },
+      { paper: "Paper 1 (Topics 1–4)", date: "2026-05-12", time: "AM" },
       { paper: "Paper 2 (Topics 5–7)", date: "2026-06-08", time: "AM" },
     ],
     topics: [
@@ -863,9 +863,9 @@ const GCSE_SUBJECTS = {
     color: "#a78bfa",
     icon: "🏛",
     exams: [
-      { paper: "Paper 1 (Medicine)",   date: "2026-05-15", time: "AM" },
-      { paper: "Paper 2 (Cold War)",   date: "2026-06-04", time: "AM" },
-      { paper: "Paper 3 (Germany)",    date: "2026-06-11", time: "AM" },
+      { paper: "Paper 1 (Medicine)",              date: "2026-05-15", time: "AM" },
+      { paper: "Paper 2 (Superpower & Elizabethan)", date: "2026-06-04", time: "AM" },
+      { paper: "Paper 3 (Weimar & Nazi Germany)", date: "2026-06-09", time: "AM" },
     ],
     topics: [
       { id: "hi1", topic: "Medicine Through Time", points: [
@@ -945,8 +945,10 @@ const GCSE_SUBJECTS = {
     color: "#f97316",
     icon: "🇩🇪",
     exams: [
-      { paper: "Listening and Reading", date: "2026-05-07", time: "PM" },
-      { paper: "Writing",               date: "2026-05-14", time: "PM" },
+      { paper: "Speaking (H)",  date: "2026-04-13", time: "AM" },
+      { paper: "Listening (H)", date: "2026-05-07", time: "PM" },
+      { paper: "Reading (H)",   date: "2026-05-14", time: "PM" },
+      { paper: "Writing (H)",   date: "2026-06-01", time: "PM" },
     ],
     topics: [
       { id: "de1", topic: "Identity & Culture", points: [
