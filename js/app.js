@@ -17,6 +17,12 @@ const S = {
   pomoSessions: 0,
   deepWorkMins: 0,
   pomoSettings: { work: 25, short: 5, long: 15 },
+  quickLinks: [
+    { emoji: '🔗', label: '', url: '' },
+    { emoji: '🔗', label: '', url: '' },
+    { emoji: '🔗', label: '', url: '' },
+    { emoji: '🔗', label: '', url: '' },
+  ],
 };
 
 
@@ -830,6 +836,82 @@ function checkDailyReset() {
   localStorage.setItem('hf_gcse_lastrun', today);
 }
 
+// ─── QUICK LINKS ──────────────────────────────────────────
+function _qlEnsure() {
+  if (!Array.isArray(S.quickLinks)) S.quickLinks = [];
+  while (S.quickLinks.length < 4) S.quickLinks.push({ emoji: '🔗', label: '', url: '' });
+}
+function _escHtml(s) {
+  return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function _escAttr(s) {
+  return (s || '').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+function _shortenUrl(u) {
+  try { return new URL(u).hostname.replace(/^www\./, ''); } catch(e) { return u.slice(0, 18); }
+}
+
+function renderQuickLinks() {
+  const grid = $('ql-grid');
+  if (!grid) return;
+  _qlEnsure();
+  grid.innerHTML = S.quickLinks.slice(0, 4).map((lk, i) =>
+    lk.url
+      ? `<a class="ql-link" href="${_escAttr(lk.url)}" target="_blank" rel="noopener noreferrer"
+            title="${_escAttr(lk.label || lk.url)}">
+           <span class="ql-emoji">${_escHtml(lk.emoji || '🔗')}</span>
+           <span class="ql-lbl">${_escHtml(lk.label || _shortenUrl(lk.url))}</span>
+         </a>`
+      : `<button class="ql-empty" data-qi="${i}" aria-label="Add link ${i + 1}">+</button>`
+  ).join('');
+  grid.querySelectorAll('.ql-empty').forEach(btn => {
+    btn.addEventListener('click', () => openQLModal(+btn.dataset.qi));
+  });
+}
+
+function openQLModal(focusIdx) {
+  _qlEnsure();
+  $('ql-modal-body').innerHTML = S.quickLinks.slice(0, 4).map((lk, i) => `
+    <div class="ql-row">
+      <span class="ql-row-n">${i + 1}</span>
+      <input class="field-in ql-e" id="ql-e-${i}" value="${_escAttr(lk.emoji || '🔗')}"
+             maxlength="2" placeholder="🔗"/>
+      <input class="field-in ql-l" id="ql-l-${i}" value="${_escAttr(lk.label)}"
+             placeholder="Label"/>
+      <input class="field-in ql-u" id="ql-u-${i}" value="${_escAttr(lk.url)}"
+             placeholder="https://..." type="url"/>
+    </div>`).join('');
+  $('ql-modal').classList.add('open');
+  if (focusIdx >= 0) setTimeout(() => { const el = $(`ql-u-${focusIdx}`); if (el) el.focus(); }, 40);
+}
+
+function closeQLModal() {
+  $('ql-modal').classList.remove('open');
+}
+
+function saveQLModal() {
+  _qlEnsure();
+  for (let i = 0; i < 4; i++) {
+    const emoji = ($(`ql-e-${i}`) ? $(`ql-e-${i}`).value.trim() : '') || '🔗';
+    const label = $(`ql-l-${i}`) ? $(`ql-l-${i}`).value.trim() : '';
+    let url = $(`ql-u-${i}`) ? $(`ql-u-${i}`).value.trim() : '';
+    if (url && !/^https?:\/\//i.test(url)) url = 'https://' + url;
+    S.quickLinks[i] = { emoji, label, url };
+  }
+  save();
+  closeQLModal();
+  renderQuickLinks();
+  toast('Quick Links saved ✓');
+}
+
+function initQuickLinks() {
+  $('ql-edit-btn').addEventListener('click', () => openQLModal(-1));
+  $('ql-modal-cls').addEventListener('click', closeQLModal);
+  $('ql-modal-cancel').addEventListener('click', closeQLModal);
+  $('ql-modal-save').addEventListener('click', saveQLModal);
+  renderQuickLinks();
+}
+
 // ─── INIT ─────────────────────────────────────────────────
 function init() {
   load();
@@ -846,6 +928,7 @@ function init() {
   initCalendar();
   initTodos();
   initHabits();
+  initQuickLinks();
 
   updateXPDisplay();
   updateStreakDisplay();

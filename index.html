@@ -37,6 +37,11 @@
       </div>
     </div>
 
+    <!-- Cloud Sync -->
+    <div class="sync-section">
+      <button class="btn-ghost sync-btn" id="sync-btn">☁ Sign in to sync</button>
+    </div>
+
     <ul class="nav-list">
       <li><button class="nav-btn active" data-view="dashboard">
         <span class="nav-icon">◈</span><span>Dashboard</span>
@@ -57,6 +62,15 @@
         <span class="nav-icon">◑</span><span>Daily Habits</span>
       </button></li>
     </ul>
+
+    <!-- Quick Links -->
+    <div class="ql-box">
+      <div class="ql-hd">
+        <span class="ql-title">QUICK LINKS</span>
+        <button class="ql-edit-btn" id="ql-edit-btn" title="Edit links">✏</button>
+      </div>
+      <div class="ql-grid" id="ql-grid"></div>
+    </div>
 
     <div class="sidebar-xp">
       <div class="xp-row">
@@ -425,6 +439,21 @@
     </div><!-- /views -->
   </main>
 
+  <!-- Quick Links modal -->
+  <div class="modal-ov" id="ql-modal">
+    <div class="modal">
+      <div class="modal-hd">
+        <h2 class="modal-title">QUICK LINKS</h2>
+        <button class="modal-cls" id="ql-modal-cls">✕</button>
+      </div>
+      <div class="modal-bd" id="ql-modal-body"></div>
+      <div class="modal-ft">
+        <button class="btn-ghost" id="ql-modal-cancel">Cancel</button>
+        <button class="btn-primary" id="ql-modal-save">SAVE LINKS</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Toast -->
   <div id="toast" class="toast"></div>
 
@@ -466,6 +495,7 @@
         renderDashboard();
         renderHabits();
         renderTodos();
+        renderQuickLinks();
         updateXPDisplay();
         updateStreakDisplay();
         console.log('[HabitForge] ☁ Cloud data loaded');
@@ -498,6 +528,28 @@
     }
   });
 
+  // Wire up the static sync button (must be declared before onAuthStateChanged callback below)
+  const syncBtn = document.getElementById('sync-btn');
+  if (syncBtn) {
+    syncBtn.addEventListener('click', async () => {
+      if (fbUid) {
+        // Already signed in — force a manual save
+        await fbSave();
+        syncBtn.textContent = '✓ Saved to cloud';
+        setTimeout(() => {
+          syncBtn.textContent = '☁ ' + (auth.currentUser?.displayName?.split(' ')[0] || 'Synced');
+        }, 2000);
+      } else {
+        try {
+          await signInWithPopup(auth, provider);
+        } catch(e) {
+          console.error('Sign-in failed:', e);
+          alert('Sign-in failed. Make sure your Cloudflare domain is added to Firebase Authorised Domains (Step 12e).');
+        }
+      }
+    });
+  }
+
   // Watch auth state — auto sign-in if user already authed before
   onAuthStateChanged(auth, async (user) => {
     if (user) {
@@ -516,35 +568,6 @@
         syncBtn.style.color = '';
       }
     }
-  });
-
-  // Add a sync button to the sidebar
-  const syncBtn = document.createElement('button');
-  syncBtn.className = 'btn-ghost';
-  syncBtn.style.cssText = 'margin: 6px 16px 12px; font-size:10px; letter-spacing:1px; width: calc(100% - 32px);';
-  syncBtn.textContent = '☁ Sign in to sync';
-  syncBtn.addEventListener('click', async () => {
-    if (fbUid) {
-      // Already signed in — force a manual save
-      await fbSave();
-      syncBtn.textContent = '✓ Saved to cloud';
-      setTimeout(() => {
-        syncBtn.textContent = '☁ ' + (auth.currentUser?.displayName?.split(' ')[0] || 'Synced');
-      }, 2000);
-    } else {
-      try {
-        await signInWithPopup(auth, provider);
-      } catch(e) {
-        console.error('Sign-in failed:', e);
-        alert('Sign-in failed. Make sure your Cloudflare domain is added to Firebase Authorised Domains (Step 12e).');
-      }
-    }
-  });
-
-  // Append button to sidebar after DOM is ready
-  document.addEventListener('DOMContentLoaded', () => {
-    const sidebar = document.querySelector('.sidebar');
-    if (sidebar) sidebar.appendChild(syncBtn);
   });
 </script>
 </body>
