@@ -913,9 +913,31 @@ function initQuickLinks() {
 }
 
 // ─── INIT ─────────────────────────────────────────────────
+// ─── THEME ──────────────────────────────────────────────
+function initTheme() {
+  const saved = localStorage.getItem('hf-theme') || 'dark';
+  applyTheme(saved);
+  document.querySelectorAll('.theme-swatch').forEach(sw => {
+    sw.addEventListener('click', () => applyTheme(sw.dataset.theme));
+  });
+}
+
+function applyTheme(name) {
+  if (name === 'dark') {
+    document.documentElement.removeAttribute('data-theme');
+  } else {
+    document.documentElement.setAttribute('data-theme', name);
+  }
+  localStorage.setItem('hf-theme', name);
+  document.querySelectorAll('.theme-swatch').forEach(s => {
+    s.classList.toggle('active', s.dataset.theme === name);
+  });
+}
+
 function init() {
   load();
   checkDailyReset();
+  initTheme();
 
   // Random quote
   const [qt, qa] = QUOTES[Math.floor(Math.random()*QUOTES.length)];
