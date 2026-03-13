@@ -681,7 +681,7 @@ function addTodo() {
 function getDueBadge(dueDate) {
   if (!dueDate) return '';
   const today = new Date(); today.setHours(0,0,0,0);
-  const due = new Date(dueDate + 'T00:00:00'); due.setHours(0,0,0,0);
+  const due = new Date(dueDate + 'T00:00:00');
   const diff = Math.ceil((due - today) / (1000*60*60*24));
   let cls = '';
   let label = '';
@@ -756,7 +756,7 @@ function renderTodos() {
   $('tst-done').textContent = done;
   $('tst-crit').textContent = S.todos.filter(t=>t.priority==='critical'&&!t.done).length;
   $('todo-count').textContent = total > 0 ? `${done}/${total} done` : '';
-  $('todo-progress-fill').style.width = total > 0 ? `${(done/total*100).toFixed(1)}%` : '0%';
+  $('todo-progress-fill').style.width = total > 0 ? `${(done / total * 100).toFixed(1)}%` : '0%';
 }
 
 function toggleTodo(id) {
