@@ -652,6 +652,7 @@ let todoFilter = 'all';
 function initTodos() {
   $('todo-add').addEventListener('click', addTodo);
   $('todo-in').addEventListener('keydown', e => { if (e.key==='Enter') addTodo(); });
+  $('todo-clear').addEventListener('click', clearDoneTodos);
   document.querySelectorAll('.fb[data-tf]').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.fb[data-tf]').forEach(b => b.classList.remove('active'));
@@ -665,13 +666,36 @@ function initTodos() {
 function addTodo() {
   const name = $('todo-in').value.trim();
   if (!name) return;
-  S.todos.unshift({ id:uid(), name, priority:$('todo-pri').value, category:$('todo-cat').value, done:false, createdAt:Date.now() });
+  const dueVal = $('todo-due').value;
+  S.todos.unshift({
+    id:uid(), name, priority:$('todo-pri').value, category:$('todo-cat').value,
+    done:false, createdAt:Date.now(),
+    dueDate: dueVal || null,
+    subtasks: []
+  });
   $('todo-in').value = '';
+  $('todo-due').value = '';
   save(); renderTodos(); toast(`Task added`);
+}
+
+function getDueBadge(dueDate) {
+  if (!dueDate) return '';
+  const today = new Date(); today.setHours(0,0,0,0);
+  const due = new Date(dueDate + 'T00:00:00');
+  const diff = Math.ceil((due - today) / (1000*60*60*24));
+  let cls = '';
+  let label = '';
+  if (diff < 0) { cls = 'overdue'; label = `${Math.abs(diff)}d overdue`; }
+  else if (diff === 0) { cls = 'today'; label = 'Due today'; }
+  else if (diff === 1) { label = 'Due tomorrow'; }
+  else { label = `Due in ${diff}d`; }
+  return `<span class="ti-due ${cls}">📅 ${label}</span>`;
 }
 
 function renderTodos() {
   let todos = [...S.todos];
+  // Ensure subtasks array exists on older todos
+  todos.forEach(t => { if (!t.subtasks) t.subtasks = []; });
   const pOrd = {critical:0,high:1,medium:2,low:3};
   todos.sort((a,b) => a.done!==b.done ? (a.done?1:-1) : pOrd[a.priority]-pOrd[b.priority]);
   if (todoFilter==='active') todos=todos.filter(t=>!t.done);
@@ -684,6 +708,16 @@ function renderTodos() {
     el.innerHTML = todos.map(t => {
       const subj = GCSE_SUBJECTS[t.category];
       const catLabel = subj ? `${subj.icon} ${subj.name.split(' ')[0]}` : t.category.toUpperCase();
+      const dueBadge = getDueBadge(t.dueDate);
+      const subtasksHTML = (t.subtasks && t.subtasks.length) ? `
+        <div class="ti-subtasks">
+          ${t.subtasks.map(st => `
+            <div class="ti-subtask ${st.done?'st-done':''}">
+              <button class="st-check ${st.done?'ck':''}" data-tid="${t.id}" data-sid="${st.id}">${st.done?'✓':''}</button>
+              <span class="st-name">${st.name}</span>
+              <button class="st-del" data-tid="${t.id}" data-dsid="${st.id}">✕</button>
+            </div>`).join('')}
+        </div>` : '';
       return `
       <div class="todo-item p-${t.priority} ${t.done?'t-done':''}">
         <button class="ti-check ${t.done?'ck':''}" data-tid="${t.id}">${t.done?'✓':''}</button>
@@ -691,18 +725,38 @@ function renderTodos() {
           <div class="ti-name">${t.name}</div>
           <div class="ti-meta">
             <span class="ti-cat">${catLabel}</span>
+            ${dueBadge}
+          </div>
+          ${subtasksHTML}
+          <div class="ti-add-subtask">
+            <input placeholder="Add subtask..." data-tid="${t.id}"/>
+            <button data-tid="${t.id}">+</button>
           </div>
         </div>
-        <button class="ti-del" data-dtid="${t.id}">✕</button>
+        <div class="ti-actions">
+          <button class="ti-del" data-dtid="${t.id}" title="Delete">✕</button>
+        </div>
       </div>`;
     }).join('');
     el.querySelectorAll('.ti-check').forEach(b => b.addEventListener('click', () => toggleTodo(b.dataset.tid)));
     el.querySelectorAll('.ti-del').forEach(b => b.addEventListener('click', () => deleteTodo(b.dataset.dtid)));
+    el.querySelectorAll('.st-check').forEach(b => b.addEventListener('click', () => toggleSubtask(b.dataset.tid, b.dataset.sid)));
+    el.querySelectorAll('.st-del').forEach(b => b.addEventListener('click', () => deleteSubtask(b.dataset.tid, b.dataset.dsid)));
+    el.querySelectorAll('.ti-add-subtask button').forEach(b => {
+      b.addEventListener('click', () => addSubtask(b.dataset.tid));
+    });
+    el.querySelectorAll('.ti-add-subtask input').forEach(inp => {
+      inp.addEventListener('keydown', e => { if (e.key==='Enter') addSubtask(inp.dataset.tid); });
+    });
   }
 
-  $('tst-total').textContent = S.todos.length;
-  $('tst-done').textContent = S.todos.filter(t=>t.done).length;
+  const total = S.todos.length;
+  const done = S.todos.filter(t=>t.done).length;
+  $('tst-total').textContent = total;
+  $('tst-done').textContent = done;
   $('tst-crit').textContent = S.todos.filter(t=>t.priority==='critical'&&!t.done).length;
+  $('todo-count').textContent = total > 0 ? `${done}/${total} done` : '';
+  $('todo-progress-fill').style.width = total > 0 ? `${(done / total * 100).toFixed(1)}%` : '0%';
 }
 
 function toggleTodo(id) {
@@ -714,6 +768,38 @@ function toggleTodo(id) {
 }
 function deleteTodo(id) {
   S.todos=S.todos.filter(t=>t.id!==id);
+  save(); renderTodos();
+}
+function clearDoneTodos() {
+  const count = S.todos.filter(t=>t.done).length;
+  if (!count) { toast('No completed tasks to clear', 'info'); return; }
+  S.todos = S.todos.filter(t=>!t.done);
+  save(); renderTodos(); toast(`Cleared ${count} completed task${count>1?'s':''}`);
+}
+
+function addSubtask(todoId) {
+  const t = S.todos.find(t=>t.id===todoId);
+  if (!t) return;
+  if (!t.subtasks) t.subtasks = [];
+  const inp = document.querySelector(`.ti-add-subtask input[data-tid="${todoId}"]`);
+  const name = inp ? inp.value.trim() : '';
+  if (!name) return;
+  t.subtasks.push({ id: uid(), name, done: false });
+  inp.value = '';
+  save(); renderTodos();
+}
+function toggleSubtask(todoId, subId) {
+  const t = S.todos.find(t=>t.id===todoId);
+  if (!t || !t.subtasks) return;
+  const st = t.subtasks.find(s=>s.id===subId);
+  if (!st) return;
+  st.done = !st.done;
+  save(); renderTodos();
+}
+function deleteSubtask(todoId, subId) {
+  const t = S.todos.find(t=>t.id===todoId);
+  if (!t || !t.subtasks) return;
+  t.subtasks = t.subtasks.filter(s=>s.id!==subId);
   save(); renderTodos();
 }
 

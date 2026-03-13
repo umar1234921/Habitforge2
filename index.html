@@ -81,6 +81,9 @@
         <div class="theme-swatch" data-theme="ocean" title="Ocean"></div>
         <div class="theme-swatch" data-theme="forest" title="Forest"></div>
         <div class="theme-swatch" data-theme="sunset" title="Sunset"></div>
+        <div class="theme-swatch" data-theme="midnight" title="Midnight"></div>
+        <div class="theme-swatch" data-theme="rosegold" title="Rose Gold"></div>
+        <div class="theme-swatch" data-theme="nord" title="Nord"></div>
       </div>
     </div>
 
@@ -339,6 +342,7 @@
           <div class="todo-main">
             <div class="todo-add">
               <input class="field-in flex1" id="todo-in" placeholder="Add a task..."/>
+              <input class="field-in" id="todo-due" type="date" style="width:140px" title="Due date (optional)"/>
               <select class="field-sel" id="todo-pri">
                 <option value="critical">🔴 Critical</option>
                 <option value="high">🟠 High</option>
@@ -360,11 +364,18 @@
               </select>
               <button class="btn-primary" id="todo-add">ADD</button>
             </div>
-            <div class="todo-filters">
-              <button class="fb active" data-tf="all">ALL</button>
-              <button class="fb" data-tf="active">ACTIVE</button>
-              <button class="fb" data-tf="done">DONE</button>
-              <button class="fb" data-tf="critical">🔴 CRITICAL</button>
+            <div class="todo-progress-bar"><div class="todo-progress-fill" id="todo-progress-fill" style="width:0%"></div></div>
+            <div class="todo-toolbar">
+              <div class="todo-filters">
+                <button class="fb active" data-tf="all">ALL</button>
+                <button class="fb" data-tf="active">ACTIVE</button>
+                <button class="fb" data-tf="done">DONE</button>
+                <button class="fb" data-tf="critical">🔴 CRITICAL</button>
+              </div>
+              <div style="display:flex;gap:8px;align-items:center">
+                <span class="todo-count" id="todo-count"></span>
+                <button class="btn-clear" id="todo-clear" title="Remove completed tasks">CLEAR DONE</button>
+              </div>
             </div>
             <div class="mit-strip">
               <span class="mit-badge">MIT</span>
