@@ -203,6 +203,29 @@ body {
   min-height: 100vh;
   overflow: hidden;
   transition: background .35s ease, color .35s ease;
+  position: relative;
+}
+
+/* Ambient glow */
+body::before {
+  content: '';
+  position: fixed;
+  inset: -20% -10%;
+  background:
+    radial-gradient(38% 38% at 20% 20%, rgba(88,101,242,.22), transparent 55%),
+    radial-gradient(30% 30% at 80% 10%, rgba(235,69,158,.16), transparent 55%),
+    radial-gradient(32% 32% at 70% 70%, rgba(87,242,135,.12), transparent 55%);
+  filter: blur(40px);
+  opacity: .9;
+  z-index: 0;
+  animation: drift 26s ease-in-out infinite alternate;
+  pointer-events: none;
+}
+
+@keyframes drift {
+  0%   { transform: translate3d(0,0,0) scale(1); }
+  50%  { transform: translate3d(-10px,10px,0) scale(1.05); }
+  100% { transform: translate3d(12px,-12px,0) scale(1.02); }
 }
 
 /* Theme transition — smooth color shifts */
@@ -349,10 +372,23 @@ body {
   font-size: 11px;
   letter-spacing: 1px;
   cursor: pointer;
-  transition: all .15s;
+  transition: all .18s ease;
   text-align: left;
+  position: relative;
 }
-.nav-btn:hover { color: var(--text-2); background: var(--bg-3); border-left-color: var(--text-4); }
+.nav-btn::after {
+  content: '';
+  position: absolute;
+  inset: 6px 10px;
+  border-radius: 10px;
+  background: linear-gradient(120deg, rgba(88,101,242,.14), rgba(235,69,158,.1));
+  opacity: 0;
+  transition: opacity .2s ease;
+  z-index: -1;
+}
+.nav-btn:hover { color: var(--text-2); background: var(--bg-3); border-left-color: var(--text-4); transform: translateX(2px); }
+.nav-btn:hover::after,
+.nav-btn.active::after { opacity: 1; }
 .nav-btn.active { color: var(--accent); background: rgba(88,101,242,.08); border-left-color: var(--accent); }
 .nav-icon { font-size: 13px; width: 16px; text-align: center; flex-shrink: 0; }
 
@@ -395,6 +431,8 @@ body {
   flex-direction: column;
   height: 100vh;
   overflow: hidden;
+  position: relative;
+  z-index: 1;
 }
 
 /* Topbar */
@@ -439,6 +477,10 @@ body {
   letter-spacing: 3px;
   line-height: 1;
   color: var(--text);
+  background: linear-gradient(120deg, var(--text), rgba(255,255,255,.7), var(--accent));
+  -webkit-background-clip: text;
+  color: transparent;
+  text-shadow: 0 10px 30px rgba(0,0,0,0.35);
 }
 .vh-phase-tag {
   font-family: var(--f-mono);
@@ -462,7 +504,25 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--r2);
   padding: 18px 20px;
+  box-shadow: var(--shadow-sm);
+  position: relative;
+  overflow: hidden;
+  transition: transform .2s ease, border-color .2s ease, box-shadow .25s ease, background .35s ease;
 }
+.card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, transparent 0%, rgba(255,255,255,.02) 40%, rgba(255,255,255,.06) 60%, transparent 100%);
+  opacity: 0;
+  transition: opacity .3s ease;
+}
+.card:hover {
+  transform: translateY(-4px);
+  border-color: var(--border-2);
+  box-shadow: 0 10px 36px rgba(0,0,0,0.35);
+}
+.card:hover::after { opacity: 1; }
 .card-lbl {
   font-family: var(--f-mono);
   font-size: 9px;
@@ -1246,7 +1306,7 @@ body {
   justify-content: center;
   gap: 7px;
   padding: 9px 18px;
-  background: var(--accent);
+  background: linear-gradient(120deg, var(--accent), var(--accent-2));
   color: #fff;
   border: none;
   border-radius: var(--r);
@@ -1255,9 +1315,10 @@ body {
   letter-spacing: 1.5px;
   cursor: pointer;
   white-space: nowrap;
-  transition: all .15s;
+  transition: transform .15s ease, filter .2s ease, box-shadow .25s ease;
+  box-shadow: 0 10px 26px rgba(88,101,242,.28);
 }
-.btn-primary:hover { filter: brightness(1.15); transform: translateY(-1px); }
+.btn-primary:hover { filter: brightness(1.05); transform: translateY(-1px); box-shadow: 0 12px 30px rgba(88,101,242,.35); }
 .btn-ghost {
   display: inline-flex;
   align-items: center;
@@ -2198,13 +2259,14 @@ body {
   max-width: 640px;
   min-height: 200px;
   perspective: 1000px;
+  filter: drop-shadow(0 12px 28px rgba(0,0,0,0.32));
 }
 .fc-card-inner {
   position: relative;
   width: 100%;
   min-height: 200px;
   transform-style: preserve-3d;
-  transition: transform .45s cubic-bezier(.4,0,.2,1);
+  transition: transform .45s cubic-bezier(.4,0,.2,1), box-shadow .35s ease;
 }
 .fc-card-inner.fc-flipped { transform: rotateY(180deg); }
 
@@ -2213,7 +2275,7 @@ body {
   inset: 0;
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
-  background: var(--bg-2);
+  background: radial-gradient(circle at 20% 20%, rgba(88,101,242,.08), transparent 45%), var(--bg-2);
   border: 1px solid var(--border);
   border-top: 3px solid var(--accent);
   border-radius: var(--r2);
