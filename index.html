@@ -61,6 +61,12 @@
       <li><button class="nav-btn" data-view="habits">
         <span class="nav-icon">◑</span><span>Daily Habits</span>
       </button></li>
+      <li><button class="nav-btn" data-view="timetable">
+        <span class="nav-icon">◧</span><span>Tomorrow's Plan</span>
+      </button></li>
+      <li><button class="nav-btn" data-view="flashcards">
+        <span class="nav-icon">◇</span><span>Flashcards</span>
+      </button></li>
     </ul>
 
     <!-- Quick Links -->
@@ -198,6 +204,18 @@
           <div class="card span-12" id="card-subject-progress">
             <div class="card-lbl">SUBJECT MASTERY OVERVIEW</div>
             <div class="subj-bars" id="subj-bars"></div>
+          </div>
+
+          <!-- Tomorrow's Plan preview -->
+          <div class="card span-6">
+            <div class="card-lbl">TOMORROW'S PLAN <span class="card-lbl-sub">— time-blocked schedule</span></div>
+            <div id="dash-tomorrow-preview"></div>
+          </div>
+
+          <!-- Flashcards due today -->
+          <div class="card span-6">
+            <div class="card-lbl">FLASHCARDS <span class="card-lbl-sub">— spaced repetition due today</span></div>
+            <div id="dash-flashcards"></div>
           </div>
         </div>
       </section>
@@ -459,10 +477,242 @@
         </div>
       </section>
 
+      <!-- ═══ TIMETABLE ═══ -->
+      <section class="view" id="view-timetable">
+        <div class="vh">
+          <h1 class="vh-title">TOMORROW'S PLAN</h1>
+          <p class="vh-sub">Time-block your day. What gets scheduled, gets done. — Cal Newport</p>
+        </div>
+
+        <!-- Book principles banner -->
+        <div class="tmbl-book-banner">
+          <div class="tmbl-book-pill">📗 Atomic Habits</div>
+          <div class="tmbl-book-pill">📘 Deep Work</div>
+          <div class="tmbl-book-pill">📙 The One Thing</div>
+          <div class="tmbl-book-pill">📔 Eat That Frog</div>
+          <div class="tmbl-book-pill">📒 Make It Stick</div>
+          <div class="tmbl-book-pill">📕 Ultralearning</div>
+        </div>
+
+        <div class="timetable-layout">
+          <div class="timetable-main">
+
+            <!-- Add form -->
+            <div class="card">
+              <div class="card-lbl">ADD TIME BLOCK</div>
+              <div class="tmbl-add-form">
+                <div class="tmbl-time-pair">
+                  <input type="time" class="field-in tmbl-time-in" id="tmbl-start" title="Start time"/>
+                  <span class="tmbl-sep">→</span>
+                  <input type="time" class="field-in tmbl-time-in" id="tmbl-end" title="End time (optional)"/>
+                </div>
+                <select class="field-sel" id="tmbl-subject">
+                  <option value="">📋 Subject / General</option>
+                  <option value="maths">📐 Maths</option>
+                  <option value="furtherMaths">∑ Further Maths</option>
+                  <option value="physics">⚛ Physics</option>
+                  <option value="chemistry">🧪 Chemistry</option>
+                  <option value="biology">🧬 Biology</option>
+                  <option value="computerScience">💻 CS</option>
+                  <option value="englishLang">✍ Eng Lang</option>
+                  <option value="englishLit">📖 Eng Lit</option>
+                  <option value="german">🇩🇪 German</option>
+                  <option value="history">🏛 History</option>
+                </select>
+                <input class="field-in tmbl-task-in" id="tmbl-task" placeholder="Task or topic..."/>
+                <input class="field-in tmbl-notes-in" id="tmbl-notes" placeholder="Notes (optional)"/>
+                <button class="btn-primary" id="tmbl-add-btn">+ ADD BLOCK</button>
+              </div>
+              <div class="tmbl-tip">💡 Tip: add one task per block — single-tasking beats multitasking (The One Thing)</div>
+            </div>
+
+            <!-- Stats strip -->
+            <div class="tmbl-stats-strip">
+              <div class="tmbl-stat-item">
+                <span class="tmbl-stat-n" id="tmbl-blocks-count">0</span>
+                <span class="tmbl-stat-l">blocks</span>
+              </div>
+              <div class="tmbl-stat-item">
+                <span class="tmbl-stat-n" id="tmbl-total">—</span>
+                <span class="tmbl-stat-l">scheduled</span>
+              </div>
+            </div>
+
+            <!-- Timeline -->
+            <div class="card">
+              <div class="card-lbl" id="timetable-date-label">LOADING...</div>
+              <div id="timetable-timeline"></div>
+            </div>
+          </div>
+
+          <div class="timetable-side">
+            <div class="card">
+              <div class="card-lbl">TIME-BLOCKING WISDOM</div>
+              <div id="tmbl-wisdom-list"></div>
+            </div>
+            <div class="card">
+              <div class="card-lbl">HOW TO TIME-BLOCK</div>
+              <ul class="protocol-list">
+                <li><span class="pi">01</span>Plan tomorrow the night before — 10 minutes max.</li>
+                <li><span class="pi">02</span>Identify your ONE most important task. Do it first.</li>
+                <li><span class="pi">03</span>Group similar tasks — batch emails, batch flashcards.</li>
+                <li><span class="pi">04</span>Block time for breaks — real rest, not half-rest.</li>
+                <li><span class="pi">05</span>Protect the first 2 hours for deep, cognitively hard work.</li>
+                <li><span class="pi">06</span>Every evening: review what you did vs. what you planned.</li>
+                <li><span class="pi">07</span>Interleave subjects (Make It Stick) — don't block 4h on one topic.</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══ FLASHCARDS ═══ -->
+      <section class="view" id="view-flashcards">
+        <div class="vh">
+          <h1 class="vh-title">FLASHCARDS</h1>
+          <p class="vh-sub">Anki SM-2 spaced repetition — the scientifically proven way to remember anything permanently.</p>
+        </div>
+
+        <!-- ── DECK LIST ── -->
+        <div id="fc-decks-panel">
+          <div class="fc-toolbar">
+            <div class="fc-today-info" id="fc-today-info">Loading...</div>
+            <button class="btn-primary" id="fc-new-deck-btn">+ NEW DECK</button>
+          </div>
+          <div id="fc-deck-list"></div>
+        </div>
+
+        <!-- ── DECK MANAGE ── -->
+        <div id="fc-manage-panel" class="fc-hidden">
+          <div class="fc-panel-hdr">
+            <button class="fc-back-btn" id="fc-back-to-decks">← DECKS</button>
+            <div class="fc-manage-title" id="fc-manage-title"></div>
+            <div class="fc-manage-exam" id="fc-manage-exam-lbl"></div>
+            <button class="btn-primary" id="fc-study-btn">▶ STUDY NOW</button>
+          </div>
+
+          <div class="card" style="margin-bottom:14px">
+            <div class="card-lbl">ADD CARDS</div>
+            <div class="fc-add-area">
+              <div class="fc-bulk-wrap">
+                <textarea id="fc-bulk-input" class="fc-bulk-input"
+                  placeholder="Paste question == answer pairs (one per line)&#10;&#10;Example:&#10;What is osmosis? == Movement of water from high to low concentration through a semi-permeable membrane&#10;Define photosynthesis == Process by which plants use light to convert CO₂ + H₂O into glucose and O₂"></textarea>
+                <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+                  <span class="fc-bulk-hint">Use <strong>==</strong> to separate question and answer. One card per line.</span>
+                  <button class="btn-ghost" id="fc-bulk-add-btn">+ ADD FROM PASTE</button>
+                </div>
+              </div>
+              <div class="fc-or-divider"><span class="fc-or-text">OR ADD SINGLE CARD</span></div>
+              <div class="fc-single-row">
+                <input id="fc-card-front" class="field-in" placeholder="Question / Front of card"/>
+                <input id="fc-card-back"  class="field-in" placeholder="Answer / Back of card"/>
+                <button class="btn-primary" id="fc-add-single-btn">+ ADD</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-lbl">CARDS IN DECK</div>
+            <div id="fc-cards-list"></div>
+          </div>
+        </div>
+
+        <!-- ── STUDY SESSION ── -->
+        <div id="fc-study-panel" class="fc-hidden">
+          <div class="fc-study-hdr">
+            <button class="fc-back-btn" id="fc-back-to-manage">← DECK</button>
+            <div class="fc-study-deck-name" id="fc-study-deck-name"></div>
+            <div class="fc-progress-wrap">
+              <div class="fc-progress-bar"><div class="fc-progress-fill" id="fc-progress-fill"></div></div>
+              <span class="fc-progress-text" id="fc-progress-text">0 / 0</span>
+            </div>
+          </div>
+
+          <div class="fc-card-wrap" id="fc-card-wrap">
+            <!-- Flashcard -->
+            <div class="fc-card">
+              <div class="fc-card-inner" id="fc-card-inner">
+                <!-- Front face -->
+                <div class="fc-card-face">
+                  <span class="fc-card-label">QUESTION</span>
+                  <div class="fc-card-q" id="fc-front-text"></div>
+                </div>
+                <!-- Back face -->
+                <div class="fc-card-face fc-card-back-face">
+                  <span class="fc-card-label">ANSWER</span>
+                  <div class="fc-card-q-echo" id="fc-front-text-back"></div>
+                  <div class="fc-card-divider"></div>
+                  <div class="fc-card-a" id="fc-back-text"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Show answer button -->
+            <button class="btn-primary fc-flip-btn" id="fc-flip-btn">SHOW ANSWER <span class="kbd">Space</span></button>
+
+            <!-- Grade buttons -->
+            <div class="fc-grade-btns fc-hidden" id="fc-grade-btns">
+              <button class="fc-grade fc-again" data-grade="0">Again<span class="fc-grade-interval"></span></button>
+              <button class="fc-grade fc-hard"  data-grade="1">Hard<span class="fc-grade-interval"></span></button>
+              <button class="fc-grade fc-good"  data-grade="2">Good<span class="fc-grade-interval"></span></button>
+              <button class="fc-grade fc-easy"  data-grade="3">Easy<span class="fc-grade-interval"></span></button>
+            </div>
+            <div class="fc-kbd-hint"><span class="kbd">1</span> Again &nbsp; <span class="kbd">2</span> Hard &nbsp; <span class="kbd">3</span> Good &nbsp; <span class="kbd">4</span> Easy</div>
+          </div>
+
+          <!-- Session complete screen -->
+          <div class="fc-session-complete fc-hidden" id="fc-session-complete"></div>
+        </div>
+      </section>
+
     </div><!-- /views -->
   </main>
 
-  <!-- Quick Links modal -->
+  <!-- New Deck Modal -->
+  <div class="modal-ov" id="fc-new-deck-modal">
+    <div class="modal">
+      <div class="modal-hd">
+        <h2 class="modal-title">NEW DECK</h2>
+        <button class="modal-cls" id="fc-nd-cancel">✕</button>
+      </div>
+      <div class="modal-bd">
+        <div class="fg">
+          <label class="field-label">Deck Name *</label>
+          <input id="fc-nd-name" class="field-in" placeholder="e.g. Biology — Cell Biology" />
+        </div>
+        <div class="fr">
+          <div class="fg">
+            <label class="field-label">Subject (optional)</label>
+            <select id="fc-nd-subject" class="field-sel">
+              <option value="">— none —</option>
+              <option value="maths">📐 Maths</option>
+              <option value="furthermaths">📊 Further Maths</option>
+              <option value="biology">🧬 Biology</option>
+              <option value="chemistry">⚗️ Chemistry</option>
+              <option value="physics">⚡ Physics</option>
+              <option value="cs">💻 Computer Science</option>
+              <option value="english_lang">📖 English Language</option>
+              <option value="english_lit">📚 English Literature</option>
+              <option value="history">🏛️ History</option>
+              <option value="german">🇩🇪 German</option>
+            </select>
+          </div>
+          <div class="fg">
+            <label class="field-label">Exam Date (optional)</label>
+            <input id="fc-nd-exam" class="field-in" type="date" />
+          </div>
+        </div>
+        <div class="fg">
+          <label class="field-label">Daily Target (cards/day)</label>
+          <input id="fc-nd-target" class="field-in" type="number" min="1" max="200" value="20" />
+        </div>
+      </div>
+      <div class="modal-ft">
+        <button class="btn-ghost" id="fc-nd-cancel-2">Cancel</button>
+        <button class="btn-primary" id="fc-nd-save">CREATE DECK</button>
+      </div>
+    </div>
+  </div>
   <div class="modal-ov" id="ql-modal">
     <div class="modal">
       <div class="modal-hd">
@@ -481,6 +731,7 @@
   <div id="toast" class="toast"></div>
 
   <script src="js/gcse-data.js"></script>
+  <script src="js/flashcards.js"></script>
   <script src="js/app.js"></script>
   <!-- ═══ FIREBASE CLOUD SYNC ═══ -->
 <script type="module">
@@ -519,6 +770,9 @@
         renderHabits();
         renderTodos();
         renderQuickLinks();
+        renderTimetable();
+        renderFlashcards();
+        renderDashFlashcards();
         updateXPDisplay();
         updateStreakDisplay();
         console.log('[HabitForge] ☁ Cloud data loaded');

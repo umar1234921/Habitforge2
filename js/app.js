@@ -17,6 +17,8 @@ const S = {
   pomoSessions: 0,
   deepWorkMins: 0,
   pomoSettings: { work: 25, short: 5, long: 15 },
+  timetable: {},       // { 'YYYY-MM-DD': [ { id, startTime, endTime, subject, task, notes } ] }
+  flashcardDecks: [],  // [ { id, name, subject, examDate, dailyTarget, cards:[] } ]
   quickLinks: [
     { emoji: '🔗', label: '', url: '' },
     { emoji: '🔗', label: '', url: '' },
@@ -58,18 +60,44 @@ function addXP(n) {
 
 // ─── QUOTES ───────────────────────────────────────────────
 const QUOTES = [
-  ["You do not rise to the level of your goals. You fall to the level of your systems.", "James Clear"],
-  ["Every action you take is a vote for the type of person you want to become.", "James Clear"],
-  ["Habits are the compound interest of self-improvement.", "James Clear"],
-  ["Deep work is the ability to focus without distraction on a cognitively demanding task.", "Cal Newport"],
+  // Atomic Habits — James Clear
+  ["You do not rise to the level of your goals. You fall to the level of your systems.", "James Clear — Atomic Habits"],
+  ["Every action you take is a vote for the type of person you want to become.", "James Clear — Atomic Habits"],
+  ["Habits are the compound interest of self-improvement.", "James Clear — Atomic Habits"],
+  ["The 2-minute rule: make it easy enough to start. Always.", "James Clear — Atomic Habits"],
+  ["Identity is the real behaviour change. Become the student. Act like the student.", "James Clear — Atomic Habits"],
+  // Deep Work — Cal Newport
+  ["Deep work is the ability to focus without distraction on a cognitively demanding task.", "Cal Newport — Deep Work"],
+  ["Clarity about what matters provides clarity about what does not.", "Cal Newport — Deep Work"],
+  ["Professionals stick to the schedule. Amateurs let life get in the way.", "Cal Newport — Deep Work"],
+  ["Shallow work is an addiction. Deep work is a superpower.", "Cal Newport — Deep Work"],
+  ["Schedule every minute of your day. What gets scheduled, gets done.", "Cal Newport — Deep Work"],
+  // The One Thing — Gary Keller
+  ["The extraordinary results are directly determined by how narrow you make your focus.", "Gary Keller — The One Thing"],
+  ["Until my most important task is done, everything else is a distraction.", "Gary Keller — The One Thing"],
+  ["Success is built sequentially. One thing at a time.", "Gary Keller — The One Thing"],
+  // Getting Things Done — David Allen
+  ["Your mind is for having ideas, not holding them.", "David Allen — Getting Things Done"],
+  ["Anything that does not belong where it is costs you time, energy and attention.", "David Allen — Getting Things Done"],
+  // Eat That Frog — Brian Tracy
+  ["Eat the biggest, ugliest frog first thing every morning.", "Brian Tracy — Eat That Frog"],
+  ["There is never enough time to do everything, but always time to do the most important thing.", "Brian Tracy — Eat That Frog"],
+  // Ultralearning — Scott Young
+  ["To learn hard things quickly, you must focus intensely without distraction.", "Scott Young — Ultralearning"],
+  ["Directness: study the subject the way it will be tested. Past papers are king.", "Scott Young — Ultralearning"],
+  // Make It Stick — Brown, Roediger & McDaniel
+  ["Retrieval practice is the single most powerful study strategy.", "Brown, Roediger & McDaniel — Make It Stick"],
+  ["Spaced practice: review material before you feel ready. The struggle is the learning.", "Brown, Roediger & McDaniel — Make It Stick"],
+  ["Interleaving subjects builds durable knowledge. Mix up your revision sessions.", "Brown, Roediger & McDaniel — Make It Stick"],
+  // The War of Art — Steven Pressfield
+  ["The resistance will always be there. You do the work anyway.", "Steven Pressfield — The War of Art"],
+  ["Turning pro means doing the work whether you feel like it or not.", "Steven Pressfield — The War of Art"],
+  // Miscellaneous
   ["What we do in life echoes in eternity.", ""],
-  ["Clarity about what matters provides clarity about what does not.", "Cal Newport"],
-  ["Professionals stick to the schedule. Amateurs let life get in the way.", "Cal Newport"],
-  ["Shallow work is an addiction. Deep work is a superpower.", "Cal Newport"],
-  ["The 2-minute rule: make it easy enough to start. Always.", "James Clear"],
-  ["Identity is the real behaviour change. Become the student. Act like the student.", "James Clear"],
+  ["A good plan today is better than a perfect plan tomorrow.", "General George S. Patton"],
 ];
 const ATOMIC_TIPS = [
+  // Atomic Habits
   "Implementation intentions: I will study [subject] at [time] in [place].",
   "Never miss twice. One bad day doesn't make a bad student.",
   "Make revision obvious: textbook open on desk before you sleep.",
@@ -80,6 +108,23 @@ const ATOMIC_TIPS = [
   "Environment design: phone in another room during deep work. Every time.",
   "Progress over perfection. One spec point ticked > zero spec points ticked.",
   "Reward yourself immediately after a good session. The brain needs it.",
+  // Deep Work
+  "Time-block your study sessions. Decide in advance what you will work on and when.",
+  "Quit social media during revision. Every notification breaks flow state.",
+  "End each session with a shutdown ritual: close books, review tomorrow's plan.",
+  // The One Thing
+  "Identify your ONE most important exam task each morning. Do it first.",
+  "Multitasking is a myth. Single-task every revision session.",
+  // Ultralearning
+  "Test yourself with past papers — don't just re-read notes.",
+  "Feedback is instant. Mark your own work. Fix gaps immediately.",
+  // Make It Stick
+  "Spaced repetition: review a topic after 1 day, then 3 days, then 1 week.",
+  "Interleave subjects: switch between Maths and Biology in one session.",
+  "Write a brief summary of what you learned after every session.",
+  // Eat That Frog
+  "Tackle your hardest subject first each day. Everything after is easier.",
+  "Set a deadline for every task. Parkinson's Law: work expands to fill the time you allow.",
 ];
 
 // ─── NAV ─────────────────────────────────────────────────
@@ -98,11 +143,13 @@ function initNav() {
 function switchView(name) {
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   $(`view-${name}`).classList.add('active');
-  if (name === 'dashboard')  renderDashboard();
-  if (name === 'specs')      renderSpecsView();
-  if (name === 'calendar')   renderCalendar();
-  if (name === 'todos')      renderTodos();
-  if (name === 'habits')     renderHabits();
+  if (name === 'dashboard')   renderDashboard();
+  if (name === 'specs')       renderSpecsView();
+  if (name === 'calendar')    renderCalendar();
+  if (name === 'todos')       renderTodos();
+  if (name === 'habits')      renderHabits();
+  if (name === 'timetable')   renderTimetable();
+  if (name === 'flashcards')  renderFlashcards();
 }
 
 // ─── TOPBAR / COUNTDOWN ───────────────────────────────────
@@ -141,6 +188,8 @@ function renderDashboard() {
   renderSubjBars();
   renderDashStats();
   renderExamAlert();
+  renderDashTomorrowPreview();
+  renderDashFlashcards();
 }
 
 function renderExamAlert() {
@@ -268,6 +317,40 @@ function renderDashStats() {
   const totalHabits = S.habits.length;
   const pct = totalHabits ? Math.round((habitsDone/totalHabits)*100) : 0;
   $('score-val').textContent = pct + '%';
+}
+
+function renderDashTomorrowPreview() {
+  const el = $('dash-tomorrow-preview');
+  if (!el) return;
+  const tomorrow = getTomorrowKey();
+  const blocks = S.timetable[tomorrow] || [];
+  const [ty, tm, td] = tomorrow.split('-').map(Number);
+  const d = new Date(ty, tm - 1, td);
+  const dateStr = d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }).toUpperCase();
+  if (!blocks.length) {
+    el.innerHTML = `<div class="dtp-empty">
+      <span class="dtp-date">${dateStr}</span>
+      <span class="dtp-msg">No plan yet — <button class="dtp-link" data-view="timetable">plan tomorrow →</button></span>
+    </div>`;
+  } else {
+    el.innerHTML = `<div class="dtp-date-row"><span class="dtp-date">${dateStr}</span><span class="dtp-count">${blocks.length} block${blocks.length !== 1 ? 's' : ''}</span></div>` +
+      blocks.slice(0, 4).map(b => {
+        const subj = GCSE_SUBJECTS[b.subject];
+        const color = subj ? subj.color : 'var(--accent)';
+        return `<div class="dtp-block" style="border-left-color:${color}">
+          <span class="dtp-time">${b.startTime}${b.endTime ? '–' + b.endTime : ''}</span>
+          <span class="dtp-task">${b.task}</span>
+        </div>`;
+      }).join('') +
+      (blocks.length > 4 ? `<div class="dtp-more">+${blocks.length - 4} more blocks</div>` : '');
+  }
+  el.querySelectorAll('.dtp-link').forEach(btn => {
+    btn.addEventListener('click', () => {
+      switchView(btn.dataset.view);
+      document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+      document.querySelector(`[data-view="${btn.dataset.view}"]`)?.classList.add('active');
+    });
+  });
 }
 
 // ─── SPECS VIEW ───────────────────────────────────────────
@@ -908,6 +991,136 @@ function deleteHabit(id) {
   save(); renderHabits(); toast('Habit removed','info');
 }
 
+// ─── TIMETABLE ────────────────────────────────────────────
+const TIMETABLE_WISDOM = [
+  { quote: "Schedule every minute of your day. What gets scheduled, gets done.", author: "Cal Newport — Deep Work" },
+  { quote: "Time-blocking is the practice of dedicating specific hours to specific work.", author: "Cal Newport — Deep Work" },
+  { quote: "Until your most important task is done, everything else is a distraction.", author: "Gary Keller — The One Thing" },
+  { quote: "The key is not to prioritise what's on your schedule, but to schedule your priorities.", author: "Stephen Covey — 7 Habits" },
+  { quote: "Eat the biggest, ugliest frog first thing in the morning — get the hard subject done.", author: "Brian Tracy — Eat That Frog" },
+  { quote: "Protect the morning. The first 2 hours of the day determine everything.", author: "Cal Newport — Deep Work" },
+  { quote: "A plan is useless until it meets reality — but having no plan is worse.", author: "General Dwight D. Eisenhower" },
+];
+
+function getTomorrowKey() {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  return d.toISOString().split('T')[0];
+}
+
+function calcDurationMins(start, end) {
+  const [sh, sm] = start.split(':').map(Number);
+  const [eh, em] = end.split(':').map(Number);
+  return Math.max(0, (eh * 60 + em) - (sh * 60 + sm));
+}
+
+function calcDuration(start, end) {
+  const mins = calcDurationMins(start, end);
+  if (mins <= 0) return '';
+  if (mins < 60) return `${mins}m`;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return m > 0 ? `${h}h ${m}m` : `${h}h`;
+}
+
+function initTimetable() {
+  $('tmbl-add-btn').addEventListener('click', addTimetableBlock);
+  $('tmbl-task').addEventListener('keydown', e => { if (e.key === 'Enter') addTimetableBlock(); });
+  renderTimetableWisdom();
+}
+
+function addTimetableBlock() {
+  const start = $('tmbl-start').value;
+  const end = $('tmbl-end').value;
+  const task = $('tmbl-task').value.trim();
+  if (!start || !task) { toast('Fill in start time and task name', 'err'); return; }
+  if (end && start >= end) { toast('End time must be after start time', 'err'); return; }
+  const key = getTomorrowKey();
+  if (!S.timetable[key]) S.timetable[key] = [];
+  S.timetable[key].push({
+    id: uid(),
+    startTime: start,
+    endTime: end || '',
+    subject: $('tmbl-subject').value,
+    task,
+    notes: $('tmbl-notes').value.trim(),
+  });
+  S.timetable[key].sort((a, b) => a.startTime.localeCompare(b.startTime));
+  $('tmbl-task').value = '';
+  $('tmbl-notes').value = '';
+  $('tmbl-end').value = '';
+  save();
+  renderTimetable();
+  toast('Time block added ✓');
+}
+
+function deleteTimetableBlock(key, id) {
+  if (!S.timetable[key]) return;
+  S.timetable[key] = S.timetable[key].filter(b => b.id !== id);
+  save();
+  renderTimetable();
+}
+
+function renderTimetable() {
+  const tomorrow = getTomorrowKey();
+  const [ty, tm, td] = tomorrow.split('-').map(Number);
+  const d = new Date(ty, tm - 1, td);
+  const dateStr = d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).toUpperCase();
+  $('timetable-date-label').textContent = dateStr;
+
+  const blocks = (S.timetable[tomorrow] || []);
+
+  // Stats
+  let totalMins = 0;
+  blocks.forEach(b => { if (b.endTime) totalMins += calcDurationMins(b.startTime, b.endTime); });
+  const hrs = Math.floor(totalMins / 60);
+  const mins = totalMins % 60;
+  $('tmbl-total').textContent = totalMins > 0 ? (hrs > 0 ? `${hrs}h${mins > 0 ? ' ' + mins + 'm' : ''}` : `${mins}m`) : '—';
+  $('tmbl-blocks-count').textContent = blocks.length;
+
+  const timeline = $('timetable-timeline');
+  if (!blocks.length) {
+    timeline.innerHTML = '<p class="empty-s">No blocks yet. Add your first time block above.</p>';
+    return;
+  }
+  timeline.innerHTML = blocks.map(b => {
+    const subj = GCSE_SUBJECTS[b.subject];
+    const color = subj ? subj.color : 'var(--accent)';
+    const subjLabel = subj ? `${subj.icon} ${subj.name.split(' ')[0]}` : (b.subject ? b.subject : 'General');
+    const dur = b.endTime ? calcDuration(b.startTime, b.endTime) : '';
+    return `
+    <div class="tmbl-block" style="border-left-color:${color}">
+      <div class="tmbl-time-col">
+        <div class="tmbl-t-start">${b.startTime}</div>
+        ${b.endTime ? `<div class="tmbl-t-arrow">↓</div><div class="tmbl-t-end">${b.endTime}</div>` : ''}
+        ${dur ? `<div class="tmbl-dur">${dur}</div>` : ''}
+      </div>
+      <div class="tmbl-body">
+        <div class="tmbl-task-name">${b.task}</div>
+        <div class="tmbl-meta">
+          <span class="ti-cat">${subjLabel}</span>
+          ${b.notes ? `<span class="tmbl-notes-text">${b.notes}</span>` : ''}
+        </div>
+      </div>
+      <button class="ti-del tmbl-del-btn" data-key="${tomorrow}" data-id="${b.id}" title="Delete block">✕</button>
+    </div>`;
+  }).join('');
+
+  timeline.querySelectorAll('.tmbl-del-btn').forEach(btn => {
+    btn.addEventListener('click', () => deleteTimetableBlock(btn.dataset.key, btn.dataset.id));
+  });
+}
+
+function renderTimetableWisdom() {
+  const el = $('tmbl-wisdom-list');
+  if (!el) return;
+  el.innerHTML = TIMETABLE_WISDOM.map(w => `
+    <div class="tmbl-wisdom-item">
+      <div class="tmbl-wisdom-quote">"${w.quote}"</div>
+      <div class="tmbl-wisdom-author">— ${w.author}</div>
+    </div>`).join('');
+}
+
 // ─── DAILY RESET ─────────────────────────────────────────
 function checkDailyReset() {
   const lastRun = localStorage.getItem('hf_gcse_lastrun');
@@ -1037,12 +1250,15 @@ function init() {
   initTodos();
   initHabits();
   initQuickLinks();
+  initFlashcards();
+  initTimetable();
 
   updateXPDisplay();
   updateStreakDisplay();
   renderDashboard();
   renderCalendar();
   renderHabits();
+  renderTimetable();
 
   // Notifications
   if ('Notification' in window && Notification.permission==='default') {
