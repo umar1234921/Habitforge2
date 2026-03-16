@@ -2,6 +2,22 @@
    FLASHCARDS — Anki SM-2 Spaced Repetition
    ================================================================ */
 
+// ─── DATE HELPERS (timezone-safe) ────────────────────────
+function parseLocalDate(str) {
+  if (!str) return null;
+  const [y, m, d] = str.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+function dateToKey(d) {
+  const y   = d.getFullYear();
+  const m   = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+function todayLocalKey() {
+  return dateToKey(new Date());
+}
+
 // ─── SM-2 ALGORITHM ──────────────────────────────────────
 const SRS = {
   /**
@@ -36,21 +52,116 @@ const SRS = {
     interval = Math.max(0, interval);
     const d = new Date();
     d.setDate(d.getDate() + interval);
-    const nextReview = d.toISOString().split('T')[0];
+    const nextReview = dateToKey(d);
     return { ...card, interval, reps, ef, lapses, nextReview };
   },
 
-  isDue(card) {
-    return !card.nextReview || card.nextReview <= todayKey();
+  /**
+   * Exam-aware grading: applies SM-2 then clamps nextReview to exam date.
+   * In the final 7-day window, schedules more aggressively.
+   * Falls back to normal SM-2 when exam mode is off or no exam date is set.
+   */
+  gradeExamAware(card, g, deck) {
+    const updated = this.grade({ ...card }, g);
+    if (!deck || !deck.examMode || !deck.examDate) return updated;
+
+    const todayD  = parseLocalDate(todayLocalKey());
+    const examD   = parseLocalDate(deck.examDate);
+    const daysToExam = Math.max(0, Math.ceil((examD - todayD) / 86400000));
+
+    if (daysToExam <= 0) return updated; // Exam is today or past — no clamping
+
+    let { nextReview } = updated;
+
+    // Clamp so nextReview never exceeds the exam date
+    if (nextReview > deck.examDate) nextReview = deck.examDate;
+
+    // Final review window (≤7 days): schedule more aggressively
+    if (daysToExam <= 7) {
+      const finalDays = g === 3 ? 3 : g === 2 ? 2 : 1;
+      const capped    = Math.min(finalDays, daysToExam);
+      const finalD    = new Date(todayD);
+      finalD.setDate(finalD.getDate() + capped);
+      const finalStr  = dateToKey(finalD);
+      if (finalStr < nextReview) nextReview = finalStr;
+    }
+
+    return { ...updated, nextReview };
   },
 
-  /** Cards due today, capped at deck.dailyTarget */
+  /**
+   * Returns exam scheduling statistics for a deck.
+   * Returns null when no exam date is configured.
+   */
+  examStats(deck) {
+    if (!deck.examDate) return null;
+    const todayD  = parseLocalDate(todayLocalKey());
+    const examD   = parseLocalDate(deck.examDate);
+    const daysToExam = Math.max(0, Math.ceil((examD - todayD) / 86400000));
+
+    const totalDueBeforeExam = deck.cards.filter(
+      c => !c.nextReview || c.nextReview <= deck.examDate
+    ).length;
+
+    const requiredPerDay = daysToExam > 0
+      ? Math.ceil(totalDueBeforeExam / daysToExam)
+      : totalDueBeforeExam;
+    const effectiveDailyTarget = Math.max(deck.dailyTarget || 20, requiredPerDay);
+    const behindSchedule       = requiredPerDay > (deck.dailyTarget || 20);
+
+    return { daysToExam, totalDueBeforeExam, requiredPerDay, effectiveDailyTarget, behindSchedule };
+  },
+
+  isDue(card) {
+    return !card.nextReview || card.nextReview <= todayLocalKey();
+  },
+
+  /**
+   * Cards due today.
+   * In exam mode: uses effectiveDailyTarget and prioritises overdue →
+   * due today → cards whose nextReview falls after the exam date.
+   * Otherwise: caps at deck.dailyTarget.
+   */
   dueToday(deck) {
+    if (deck.examMode && deck.examDate) {
+      const stats          = this.examStats(deck);
+      const effectiveTarget = stats ? stats.effectiveDailyTarget : (deck.dailyTarget || 20);
+      const today          = todayLocalKey();
+      const examDate       = deck.examDate;
+
+      // Priority 1: overdue (no nextReview or nextReview before today)
+      const overdue   = deck.cards.filter(c => !c.nextReview || c.nextReview < today);
+      // Priority 2: due today
+      const dueNow    = deck.cards.filter(c => c.nextReview === today);
+      // Priority 3: future cards whose nextReview falls after exam (pull them forward)
+      const afterExam = deck.cards.filter(
+        c => c.nextReview && c.nextReview > today && c.nextReview > examDate
+      );
+
+      const seen   = new Set();
+      const unique = [...overdue, ...dueNow, ...afterExam].filter(c => {
+        if (seen.has(c.id)) return false;
+        seen.add(c.id);
+        return true;
+      });
+      return unique.slice(0, effectiveTarget);
+    }
     const due = deck.cards.filter(c => this.isDue(c));
     return due.slice(0, deck.dailyTarget || 20);
   },
 
   dueCount(deck) {
+    if (deck.examMode && deck.examDate) {
+      const stats          = this.examStats(deck);
+      const effectiveTarget = stats ? stats.effectiveDailyTarget : (deck.dailyTarget || 20);
+      const today          = todayLocalKey();
+      const examDate       = deck.examDate;
+      const count = deck.cards.filter(c =>
+        !c.nextReview || c.nextReview <= today ||
+        (c.nextReview > today && c.nextReview > examDate)
+      ).length;
+      return Math.min(count, effectiveTarget);
+    }
     return Math.min(
       deck.cards.filter(c => this.isDue(c)).length,
       deck.dailyTarget || 20
@@ -113,8 +224,9 @@ function renderFCDecks() {
     const subj  = deck.subject ? GCSE_SUBJECTS[deck.subject] : null;
     const color = subj ? subj.color : 'var(--accent)';
     const daysToExam = deck.examDate
-      ? Math.max(0, Math.ceil((new Date(deck.examDate) - new Date()) / 86400000))
+      ? Math.max(0, Math.ceil((parseLocalDate(deck.examDate) - parseLocalDate(todayLocalKey())) / 86400000))
       : null;
+    const examSt = deck.examMode && deck.examDate ? SRS.examStats(deck) : null;
 
     return `
     <div class="fc-deck-card" style="border-left-color:${color}">
@@ -128,7 +240,10 @@ function renderFCDecks() {
               : `<span class="fc-dm-ok">✓ up to date</span>`}
             <span class="fc-dm-target">🎯 ${deck.dailyTarget || 20}/day</span>
             ${daysToExam !== null
-              ? `<span class="fc-dm-exam">${daysToExam}d to exam</span>`
+              ? `<span class="fc-dm-exam">${deck.examMode ? '📅 ' : ''}${daysToExam}d to exam</span>`
+              : ''}
+            ${examSt
+              ? `<span class="fc-dm-req${examSt.behindSchedule ? ' fc-dm-warn' : ''}">${examSt.behindSchedule ? '⚠ ' : ''}${examSt.requiredPerDay}/day needed</span>`
               : ''}
           </div>
         </div>
@@ -173,6 +288,7 @@ function openNewDeckModal() {
   $('fc-nd-subject').value = '';
   $('fc-nd-exam').value = '';
   $('fc-nd-target').value = '20';
+  $('fc-nd-exam-mode').checked = false;
   $('fc-new-deck-modal').classList.add('open');
   $('fc-nd-name').focus();
 }
@@ -188,6 +304,7 @@ function saveNewDeck() {
     subject:     $('fc-nd-subject').value,
     examDate:    $('fc-nd-exam').value,
     dailyTarget: Math.max(1, parseInt($('fc-nd-target').value) || 20),
+    examMode:    $('fc-nd-exam-mode').checked,
     cards: [],
   };
   if (!S.flashcardDecks) S.flashcardDecks = [];
@@ -210,7 +327,20 @@ function openDeckManage(id) {
   $('fc-manage-title').style.color = color;
 
   const lbl = deck.examDate
-    ? `Exam: ${deck.examDate} · ${Math.max(0, Math.ceil((new Date(deck.examDate) - new Date()) / 86400000))}d away`
+    ? (() => {
+        const examD  = parseLocalDate(deck.examDate);
+        const todayD = parseLocalDate(todayLocalKey());
+        const days   = Math.max(0, Math.ceil((examD - todayD) / 86400000));
+        let s = `Exam: ${deck.examDate} · ${days}d away`;
+        if (deck.examMode) {
+          const stats = SRS.examStats(deck);
+          if (stats) {
+            s += ` · ${stats.requiredPerDay}/day needed`;
+            if (stats.behindSchedule) s += ' ⚠';
+          }
+        }
+        return s;
+      })()
     : '';
   $('fc-manage-exam-lbl').textContent = lbl;
 
@@ -325,7 +455,9 @@ function startStudySession(deckId) {
   const due = SRS.dueToday(deck);
   if (!due.length) { toast('No cards due — well done!'); return; }
 
-  _fcStudyQueue   = [...due].sort(() => Math.random() - 0.5);
+  _fcStudyQueue   = deck.examMode && deck.examDate
+    ? [...due]                              // preserve priority order for exam mode
+    : [...due].sort(() => Math.random() - 0.5);
   _fcStudyIdx     = 0;
   _fcFlipped      = false;
   _fcSessionStats = { again: 0, hard: 0, good: 0, easy: 0 };
@@ -363,10 +495,11 @@ function renderStudyCard() {
 }
 
   function updateGradeHints(card) {
+    const deck = fcCurrentDeck();
     [0, 1, 2, 3].forEach(g => {
       const btn  = document.querySelector(`.fc-grade[data-grade="${g}"]`);
       if (!btn) return;
-      const sim  = SRS.grade({ ...card }, g);
+      const sim  = SRS.gradeExamAware({ ...card }, g, deck);
       const span = btn.querySelector('.fc-grade-interval');
       if (span) {
         if (sim.interval === 0) span.textContent = 'now';
@@ -389,7 +522,7 @@ function gradeCard(g) {
   const card = _fcStudyQueue[_fcStudyIdx];
   if (!card) return;
 
-  const updated = SRS.grade({ ...card }, g);
+  const updated = SRS.gradeExamAware({ ...card }, g, deck);
   const idx = deck.cards.findIndex(c => c.id === card.id);
   if (idx !== -1) deck.cards[idx] = updated;
 
