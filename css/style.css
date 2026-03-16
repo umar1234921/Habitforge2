@@ -1995,6 +1995,36 @@ body::before {
   font-size: 10px;
   color: var(--text-4);
 }
+.fc-dm-req {
+  font-family: var(--f-mono);
+  font-size: 10px;
+  color: var(--text-3);
+  background: var(--bg-3);
+  padding: 2px 7px;
+  border-radius: 10px;
+}
+.fc-dm-warn {
+  color: var(--accent-5);
+  background: rgba(237,66,69,.1);
+}
+.fc-exam-mode-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-family: var(--f-mono);
+  font-size: 11px;
+  color: var(--text-2);
+}
+.fc-exam-mode-label input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.fc-exam-mode-text {
+  line-height: 1.4;
+}
 .fc-deck-actions {
   display: flex;
   align-items: center;
