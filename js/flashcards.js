@@ -16,13 +16,13 @@ const SRS = {
     let lapses   = card.lapses  || 0;
 
     if (g === 0) {
-      // Again — reset to 1 day, count lapse
-      interval = 1;
+      // Again — keep card in learning with a same-day retry, count lapse
+      interval = 0;
       reps     = 0;
       lapses++;
     } else {
       // Hard / Good / Easy: advance interval
-      if (reps === 0)      interval = 1;
+      if (reps === 0)      interval = g === 3 ? 4 : g === 1 ? 1 : 2;
       else if (reps === 1) interval = 6;
       else                 interval = Math.round(interval * ef);
 
@@ -33,7 +33,7 @@ const SRS = {
       reps++;
     }
 
-    interval = Math.max(1, interval);
+    interval = Math.max(0, interval);
     const d = new Date();
     d.setDate(d.getDate() + interval);
     const nextReview = d.toISOString().split('T')[0];
@@ -362,15 +362,19 @@ function renderStudyCard() {
   updateGradeHints(card);
 }
 
-function updateGradeHints(card) {
-  [0, 1, 2, 3].forEach(g => {
-    const btn  = document.querySelector(`.fc-grade[data-grade="${g}"]`);
-    if (!btn) return;
-    const sim  = SRS.grade({ ...card }, g);
-    const span = btn.querySelector('.fc-grade-interval');
-    if (span) span.textContent = sim.interval === 1 ? '1 day' : `${sim.interval}d`;
-  });
-}
+  function updateGradeHints(card) {
+    [0, 1, 2, 3].forEach(g => {
+      const btn  = document.querySelector(`.fc-grade[data-grade="${g}"]`);
+      if (!btn) return;
+      const sim  = SRS.grade({ ...card }, g);
+      const span = btn.querySelector('.fc-grade-interval');
+      if (span) {
+        if (sim.interval === 0) span.textContent = 'now';
+        else if (sim.interval === 1) span.textContent = '1 day';
+        else span.textContent = `${sim.interval}d`;
+      }
+    });
+  }
 
 function flipCard() {
   _fcFlipped = true;
