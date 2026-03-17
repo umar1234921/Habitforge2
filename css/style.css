@@ -516,6 +516,7 @@ body::before {
   background: linear-gradient(135deg, transparent 0%, rgba(255,255,255,.02) 40%, rgba(255,255,255,.06) 60%, transparent 100%);
   opacity: 0;
   transition: opacity .3s ease;
+  pointer-events: none;
 }
 .card:hover {
   transform: translateY(-4px);
