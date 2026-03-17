@@ -194,16 +194,20 @@ function renderFlashcards() {
 }
 
 function renderFCDecks() {
-  const decks = S.flashcardDecks || [];
+  const allDecks = S.flashcardDecks || [];
+  const filterSubject = $('fc-subject-filter')?.value || '';
+  const decks = filterSubject
+    ? allDecks.filter(d => d.subject === filterSubject)
+    : allDecks;
 
-  // Header summary
+  // Header summary (always show totals across ALL decks)
   let totalDue = 0;
-  decks.forEach(d => { totalDue += SRS.dueCount(d); });
+  allDecks.forEach(d => { totalDue += SRS.dueCount(d); });
   const infoEl = $('fc-today-info');
   if (infoEl) {
     infoEl.innerHTML =
       `<span class="fc-today-n">${totalDue}</span> card${totalDue !== 1 ? 's' : ''} due today` +
-      ` across <span class="fc-today-n">${decks.length}</span> deck${decks.length !== 1 ? 's' : ''}`;
+      ` across <span class="fc-today-n">${allDecks.length}</span> deck${allDecks.length !== 1 ? 's' : ''}`;
   }
 
   const list = $('fc-deck-list');
@@ -211,7 +215,7 @@ function renderFCDecks() {
     list.innerHTML = `
       <div class="fc-empty">
         <div class="fc-empty-icon">🃏</div>
-        <div class="fc-empty-msg">No decks yet — create your first deck and start spaced repetition.</div>
+        <div class="fc-empty-msg">${filterSubject ? 'No decks for this subject.' : 'No decks yet — create your first deck and start spaced repetition.'}</div>
       </div>`;
     return;
   }
@@ -313,6 +317,30 @@ function saveNewDeck() {
   closeNewDeckModal();
   renderFCDecks();
   toast(`Deck "${name}" created ✓`);
+}
+
+// ─── DECK SETTINGS MODAL ─────────────────────────────────
+function openDeckSettingsModal() {
+  const deck = fcCurrentDeck();
+  if (!deck) return;
+  $('fc-settings-target').value    = deck.dailyTarget || 20;
+  $('fc-settings-exam').value      = deck.examDate || '';
+  $('fc-settings-exam-mode').checked = !!deck.examMode;
+  $('fc-settings-modal').classList.add('open');
+}
+function closeDeckSettingsModal() {
+  $('fc-settings-modal').classList.remove('open');
+}
+function saveDeckSettings() {
+  const deck = fcCurrentDeck();
+  if (!deck) return;
+  deck.dailyTarget = Math.max(1, parseInt($('fc-settings-target').value) || 20);
+  deck.examDate    = $('fc-settings-exam').value;
+  deck.examMode    = $('fc-settings-exam-mode').checked;
+  save();
+  closeDeckSettingsModal();
+  openDeckManage(_fcCurrentDeckId);
+  toast('Deck settings saved ✓');
 }
 
 // ─── DECK MANAGEMENT ──────────────────────────────────────
@@ -643,9 +671,21 @@ function initFlashcards() {
     renderFCDecks();
   });
   $('fc-study-btn').addEventListener('click', () => startStudySession(_fcCurrentDeckId));
+  $('fc-settings-btn').addEventListener('click', openDeckSettingsModal);
   $('fc-add-single-btn').addEventListener('click', addSingleCard);
   $('fc-bulk-add-btn').addEventListener('click', addBulkCards);
   $('fc-card-back').addEventListener('keydown', e => { if (e.key === 'Enter') addSingleCard(); });
+
+  // Deck settings modal
+  $('fc-settings-cancel').addEventListener('click', closeDeckSettingsModal);
+  $('fc-settings-cancel-2').addEventListener('click', closeDeckSettingsModal);
+  $('fc-settings-save').addEventListener('click', saveDeckSettings);
+  $('fc-settings-modal').addEventListener('click', e => {
+    if (e.target === $('fc-settings-modal')) closeDeckSettingsModal();
+  });
+
+  // Subject filter
+  $('fc-subject-filter').addEventListener('change', renderFCDecks);
 
   // Study panel
   $('fc-back-to-manage').addEventListener('click', () => openDeckManage(_fcCurrentDeckId));

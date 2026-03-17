@@ -1924,6 +1924,17 @@ body::before {
   gap: 10px;
   margin-bottom: 20px;
 }
+.fc-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.fc-subject-filter {
+  font-size: 11px;
+  padding: 6px 10px;
+  height: auto;
+}
 .fc-today-info {
   font-family: var(--f-mono);
   font-size: 12px;

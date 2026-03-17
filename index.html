@@ -577,7 +577,22 @@
         <div id="fc-decks-panel">
           <div class="fc-toolbar">
             <div class="fc-today-info" id="fc-today-info">Loading...</div>
-            <button class="btn-primary" id="fc-new-deck-btn">+ NEW DECK</button>
+            <div class="fc-toolbar-right">
+              <select id="fc-subject-filter" class="field-sel fc-subject-filter" title="Filter by subject">
+                <option value="">All Subjects</option>
+                <option value="maths">📐 Maths</option>
+                <option value="furthermaths">📊 Further Maths</option>
+                <option value="biology">🧬 Biology</option>
+                <option value="chemistry">⚗️ Chemistry</option>
+                <option value="physics">⚡ Physics</option>
+                <option value="cs">💻 Computer Science</option>
+                <option value="english_lang">📖 English Language</option>
+                <option value="english_lit">📚 English Literature</option>
+                <option value="history">🏛️ History</option>
+                <option value="german">🇩🇪 German</option>
+              </select>
+              <button class="btn-primary" id="fc-new-deck-btn">+ NEW DECK</button>
+            </div>
           </div>
           <div id="fc-deck-list"></div>
         </div>
@@ -588,6 +603,7 @@
             <button class="fc-back-btn" id="fc-back-to-decks">← DECKS</button>
             <div class="fc-manage-title" id="fc-manage-title"></div>
             <div class="fc-manage-exam" id="fc-manage-exam-lbl"></div>
+            <button class="btn-ghost" id="fc-settings-btn" title="Deck settings">⚙ SETTINGS</button>
             <button class="btn-primary" id="fc-study-btn">▶ STUDY NOW</button>
           </div>
 
@@ -720,6 +736,39 @@
       </div>
     </div>
   </div>
+  <!-- Deck Settings Modal -->
+  <div class="modal-ov" id="fc-settings-modal">
+    <div class="modal">
+      <div class="modal-hd">
+        <h2 class="modal-title">DECK SETTINGS</h2>
+        <button class="modal-cls" id="fc-settings-cancel">✕</button>
+      </div>
+      <div class="modal-bd">
+        <div class="fr">
+          <div class="fg">
+            <label class="field-label">Daily Target (cards/day)</label>
+            <input id="fc-settings-target" class="field-in" type="number" min="1" max="200" value="20" />
+          </div>
+          <div class="fg">
+            <label class="field-label">Exam Date (optional)</label>
+            <input id="fc-settings-exam" class="field-in" type="date" />
+          </div>
+        </div>
+        <div class="fg">
+          <label class="field-label">Exam Mode</label>
+          <label class="fc-exam-mode-label">
+            <input type="checkbox" id="fc-settings-exam-mode">
+            <span class="fc-exam-mode-text">Auto-adjust daily schedule to reach exam date prepared</span>
+          </label>
+        </div>
+      </div>
+      <div class="modal-ft">
+        <button class="btn-ghost" id="fc-settings-cancel-2">Cancel</button>
+        <button class="btn-primary" id="fc-settings-save">SAVE SETTINGS</button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-ov" id="ql-modal">
     <div class="modal">
       <div class="modal-hd">
