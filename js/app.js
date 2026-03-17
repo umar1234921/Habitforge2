@@ -329,15 +329,13 @@ function renderDashSleepPreview() {
   if (!last) {
     el.innerHTML = `<div class="dtp-empty"><span class="dtp-msg">No sleep logged yet — <button class="dtp-link" data-view="sleep">log tonight →</button></span></div>`;
   } else {
-    const moodEmoji = ['','😣','😕','😐','🙂','😄'];
-    const grogLabel = ['','Wide awake','Slight','Moderate','Heavy','Zombie'];
     el.innerHTML = `
       <div class="dsp-entry">
         <div class="dsp-date">${last.date}</div>
-        <div class="dsp-row"><span class="dsp-icon">🌙</span><span class="dsp-lbl">Before sleep</span><span class="dsp-val">${moodEmoji[last.preSleep] ?? last.preSleep}/5</span></div>
-        <div class="dsp-row"><span class="dsp-icon">⏱</span><span class="dsp-lbl">Duration</span><span class="dsp-val">${last.duration}h</span></div>
-        <div class="dsp-row"><span class="dsp-icon">😴</span><span class="dsp-lbl">Grogginess</span><span class="dsp-val">${grogLabel[last.grogginess] ?? last.grogginess}</span></div>
-        <div class="dsp-row"><span class="dsp-icon">☀️</span><span class="dsp-lbl">After sleep</span><span class="dsp-val">${moodEmoji[last.postSleep] ?? last.postSleep}/5</span></div>
+        <div class="dsp-row"><span class="dsp-tag">PRE</span><span class="dsp-lbl">Before sleep</span><span class="dsp-val">${last.preSleep}/5</span></div>
+        <div class="dsp-row"><span class="dsp-tag">DUR</span><span class="dsp-lbl">Duration</span><span class="dsp-val">${last.duration}h</span></div>
+        <div class="dsp-row"><span class="dsp-tag dsp-tag--grog">GRG</span><span class="dsp-lbl">Grogginess</span><span class="dsp-val">${SLEEP_GROG_LABELS[last.grogginess] ?? last.grogginess}</span></div>
+        <div class="dsp-row"><span class="dsp-tag dsp-tag--post">PST</span><span class="dsp-lbl">After sleep</span><span class="dsp-val">${last.postSleep}/5</span></div>
       </div>`;
   }
   el.querySelectorAll('.dtp-link').forEach(btn => {
@@ -1135,7 +1133,13 @@ function initSleepJournal() {
   function wireSlider(id, valId, formatter) {
     const sl = $(id), vl = $(valId);
     if (!sl || !vl) return;
-    const update = () => { vl.textContent = formatter(sl.value); };
+    const update = () => {
+      vl.textContent = formatter(sl.value);
+      const min = parseFloat(sl.min) || 0;
+      const max = parseFloat(sl.max) || 100;
+      const pct = ((parseFloat(sl.value) - min) / (max - min)) * 100;
+      sl.style.setProperty('--val', pct + '%');
+    };
     sl.addEventListener('input', update);
     update();
   }
@@ -1202,7 +1206,7 @@ function renderSleepHistory() {
       <div class="sj-entry-date">${dateStr}</div>
       <div class="sj-entry-metrics">
         <div class="sj-metric-col">
-          <span class="sj-metric-icon">🌙</span>
+          <span class="sj-tag">PRE</span>
           <span class="sj-stars" title="Pre-sleep mood">${stars(e.preSleep)}</span>
           <span class="sj-label">before</span>
         </div>
@@ -1211,12 +1215,12 @@ function renderSleepHistory() {
           <span class="sj-label">sleep</span>
         </div>
         <div class="sj-metric-col">
-          <span class="sj-metric-icon">😴</span>
-          <span class="sj-grog-val">${SLEEP_GROG_EMOJIS[e.grogginess]}</span>
+          <span class="sj-tag sj-tag--grog">GRG</span>
+          <span class="sj-grog-val">${SLEEP_GROG_LABELS[e.grogginess]}</span>
           <span class="sj-label">grog</span>
         </div>
         <div class="sj-metric-col">
-          <span class="sj-metric-icon">☀️</span>
+          <span class="sj-tag sj-tag--post">PST</span>
           <span class="sj-stars" title="Post-sleep mood">${stars(e.postSleep)}</span>
           <span class="sj-label">after</span>
         </div>
