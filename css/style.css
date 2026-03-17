@@ -1924,6 +1924,15 @@ body::before {
   gap: 10px;
   margin-bottom: 20px;
 }
+.fc-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.fc-subject-filter {
+  min-width: 150px;
+}
 .fc-today-info {
   font-family: var(--f-mono);
   font-size: 12px;
@@ -2025,6 +2034,23 @@ body::before {
 }
 .fc-exam-mode-text {
   line-height: 1.4;
+}
+.fc-settings-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.fc-settings-row .fg {
+  flex: 1;
+  min-width: 160px;
+}
+.fc-settings-exam-wrap {
+  flex: 2 !important;
+}
+.fc-settings-actions {
+  flex-shrink: 0;
+  padding-bottom: 2px;
 }
 .fc-deck-actions {
   display: flex;

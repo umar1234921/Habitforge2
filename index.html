@@ -577,7 +577,22 @@
         <div id="fc-decks-panel">
           <div class="fc-toolbar">
             <div class="fc-today-info" id="fc-today-info">Loading...</div>
-            <button class="btn-primary" id="fc-new-deck-btn">+ NEW DECK</button>
+            <div class="fc-toolbar-right">
+              <select id="fc-subject-filter" class="field-sel fc-subject-filter">
+                <option value="">All Subjects</option>
+                <option value="maths">📐 Maths</option>
+                <option value="furthermaths">📊 Further Maths</option>
+                <option value="biology">🧬 Biology</option>
+                <option value="chemistry">⚗️ Chemistry</option>
+                <option value="physics">⚡ Physics</option>
+                <option value="cs">💻 Computer Science</option>
+                <option value="english_lang">📖 English Language</option>
+                <option value="english_lit">📚 English Literature</option>
+                <option value="history">🏛️ History</option>
+                <option value="german">🇩🇪 German</option>
+              </select>
+              <button class="btn-primary" id="fc-new-deck-btn">+ NEW DECK</button>
+            </div>
           </div>
           <div id="fc-deck-list"></div>
         </div>
@@ -589,6 +604,26 @@
             <div class="fc-manage-title" id="fc-manage-title"></div>
             <div class="fc-manage-exam" id="fc-manage-exam-lbl"></div>
             <button class="btn-primary" id="fc-study-btn">▶ STUDY NOW</button>
+          </div>
+
+          <div class="card fc-settings-card" style="margin-bottom:14px">
+            <div class="card-lbl">DECK SETTINGS</div>
+            <div class="fc-settings-row">
+              <div class="fg">
+                <label class="field-label" for="fc-settings-target">Daily Target (cards/day)</label>
+                <input id="fc-settings-target" class="field-in" type="number" min="1" max="200" />
+              </div>
+              <div class="fg fc-settings-exam-wrap">
+                <label class="field-label" for="fc-settings-exam-mode">Exam Mode</label>
+                <label class="fc-exam-mode-label">
+                  <input type="checkbox" id="fc-settings-exam-mode">
+                  <span class="fc-exam-mode-text">Auto-adjust daily schedule to reach exam date prepared</span>
+                </label>
+              </div>
+              <div class="fc-settings-actions">
+                <button class="btn-primary" id="fc-settings-save-btn">SAVE SETTINGS</button>
+              </div>
+            </div>
           </div>
 
           <div class="card" style="margin-bottom:14px">
