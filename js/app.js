@@ -18,6 +18,7 @@ const S = {
   deepWorkMins: 0,
   pomoSettings: { work: 25, short: 5, long: 15 },
   timetable: {},       // { 'YYYY-MM-DD': [ { id, startTime, endTime, subject, task, notes } ] }
+  sleepLog: [],        // [ { id, date, preSleep, duration, grogginess, postSleep, notes } ]
   flashcardDecks: [],  // [ { id, name, subject, examDate, dailyTarget, cards:[] } ]
   quickLinks: [
     { emoji: '🔗', label: '', url: '' },
@@ -148,6 +149,7 @@ function switchView(name) {
   if (name === 'calendar')    renderCalendar();
   if (name === 'todos')       renderTodos();
   if (name === 'habits')      renderHabits();
+  if (name === 'sleep')       renderSleepJournal();
   if (name === 'timetable')   renderTimetable();
   if (name === 'flashcards')  renderFlashcards();
 }
@@ -188,8 +190,8 @@ function renderDashboard() {
   renderSubjBars();
   renderDashStats();
   renderExamAlert();
-  renderDashTomorrowPreview();
   renderDashFlashcards();
+  renderDashSleepPreview();
 }
 
 function renderExamAlert() {
@@ -319,30 +321,24 @@ function renderDashStats() {
   $('score-val').textContent = pct + '%';
 }
 
-function renderDashTomorrowPreview() {
-  const el = $('dash-tomorrow-preview');
+function renderDashSleepPreview() {
+  const el = $('dash-sleep-preview');
   if (!el) return;
-  const tomorrow = getTomorrowKey();
-  const blocks = S.timetable[tomorrow] || [];
-  const [ty, tm, td] = tomorrow.split('-').map(Number);
-  const d = new Date(ty, tm - 1, td);
-  const dateStr = d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }).toUpperCase();
-  if (!blocks.length) {
-    el.innerHTML = `<div class="dtp-empty">
-      <span class="dtp-date">${dateStr}</span>
-      <span class="dtp-msg">No plan yet — <button class="dtp-link" data-view="timetable">plan tomorrow →</button></span>
-    </div>`;
+  if (!Array.isArray(S.sleepLog)) S.sleepLog = [];
+  const last = S.sleepLog.slice().sort((a,b) => b.date.localeCompare(a.date))[0];
+  if (!last) {
+    el.innerHTML = `<div class="dtp-empty"><span class="dtp-msg">No sleep logged yet — <button class="dtp-link" data-view="sleep">log tonight →</button></span></div>`;
   } else {
-    el.innerHTML = `<div class="dtp-date-row"><span class="dtp-date">${dateStr}</span><span class="dtp-count">${blocks.length} block${blocks.length !== 1 ? 's' : ''}</span></div>` +
-      blocks.slice(0, 4).map(b => {
-        const subj = GCSE_SUBJECTS[b.subject];
-        const color = subj ? subj.color : 'var(--accent)';
-        return `<div class="dtp-block" style="border-left-color:${color}">
-          <span class="dtp-time">${b.startTime}${b.endTime ? '–' + b.endTime : ''}</span>
-          <span class="dtp-task">${b.task}</span>
-        </div>`;
-      }).join('') +
-      (blocks.length > 4 ? `<div class="dtp-more">+${blocks.length - 4} more blocks</div>` : '');
+    const moodEmoji = ['','😣','😕','😐','🙂','😄'];
+    const grogLabel = ['','Wide awake','Slight','Moderate','Heavy','Zombie'];
+    el.innerHTML = `
+      <div class="dsp-entry">
+        <div class="dsp-date">${last.date}</div>
+        <div class="dsp-row"><span class="dsp-icon">🌙</span><span class="dsp-lbl">Before sleep</span><span class="dsp-val">${moodEmoji[last.preSleep] ?? last.preSleep}/5</span></div>
+        <div class="dsp-row"><span class="dsp-icon">⏱</span><span class="dsp-lbl">Duration</span><span class="dsp-val">${last.duration}h</span></div>
+        <div class="dsp-row"><span class="dsp-icon">😴</span><span class="dsp-lbl">Grogginess</span><span class="dsp-val">${grogLabel[last.grogginess] ?? last.grogginess}</span></div>
+        <div class="dsp-row"><span class="dsp-icon">☀️</span><span class="dsp-lbl">After sleep</span><span class="dsp-val">${moodEmoji[last.postSleep] ?? last.postSleep}/5</span></div>
+      </div>`;
   }
   el.querySelectorAll('.dtp-link').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -1121,6 +1117,134 @@ function renderTimetableWisdom() {
     </div>`).join('');
 }
 
+// ─── SLEEP JOURNAL ────────────────────────────────────────
+const SLEEP_MOOD_LABELS  = ['','Anxious','Uneasy','Neutral','Peaceful','Blissful'];
+const SLEEP_POST_LABELS  = ['','Drained','Low','OK','Good','Energised'];
+const SLEEP_GROG_LABELS  = ['','Wide awake','Slight','Moderate','Heavy','Zombie'];
+const SLEEP_MOOD_EMOJIS  = ['','😣','😕','😐','🙂','😄'];
+const SLEEP_GROG_EMOJIS  = ['','⚡','😑','😪','😵','🧟'];
+
+function initSleepJournal() {
+  if (!Array.isArray(S.sleepLog)) S.sleepLog = [];
+
+  // Set date to today by default
+  const dateIn = $('sleep-date');
+  if (dateIn) dateIn.value = todayKey();
+
+  // Wire up sliders to show live values
+  function wireSlider(id, valId, formatter) {
+    const sl = $(id), vl = $(valId);
+    if (!sl || !vl) return;
+    const update = () => { vl.textContent = formatter(sl.value); };
+    sl.addEventListener('input', update);
+    update();
+  }
+  wireSlider('pre-sleep',   'pre-sleep-val',  v => `${v}/5`);
+  wireSlider('sleep-dur',   'sleep-dur-val',  v => `${parseFloat(v)}h`);
+  wireSlider('grogginess',  'grogginess-val', v => `${v}/5`);
+  wireSlider('post-sleep',  'post-sleep-val', v => `${v}/5`);
+
+  $('sleep-log-btn').addEventListener('click', logSleep);
+  renderSleepJournal();
+}
+
+function logSleep() {
+  if (!Array.isArray(S.sleepLog)) S.sleepLog = [];
+  const date = $('sleep-date').value || todayKey();
+  const preSleep  = parseInt($('pre-sleep').value);
+  const duration  = parseFloat($('sleep-dur').value);
+  const grogginess = parseInt($('grogginess').value);
+  const postSleep = parseInt($('post-sleep').value);
+  const notes     = $('sleep-notes').value.trim();
+
+  // Prevent duplicate for same date — update existing
+  const existing = S.sleepLog.find(e => e.date === date);
+  if (existing) {
+    Object.assign(existing, { preSleep, duration, grogginess, postSleep, notes });
+    toast('Sleep entry updated ✓');
+  } else {
+    S.sleepLog.unshift({ id: uid(), date, preSleep, duration, grogginess, postSleep, notes });
+    toast('Sleep logged 💤');
+  }
+  save();
+  renderSleepJournal();
+  renderDashSleepPreview();
+}
+
+function deleteSleepEntry(id) {
+  S.sleepLog = S.sleepLog.filter(e => e.id !== id);
+  save();
+  renderSleepJournal();
+  renderDashSleepPreview();
+}
+
+function renderSleepJournal() {
+  if (!Array.isArray(S.sleepLog)) S.sleepLog = [];
+  renderSleepHistory();
+  renderSleepAverages();
+}
+
+function renderSleepHistory() {
+  const el = $('sleep-history-list');
+  if (!el) return;
+  const entries = S.sleepLog.slice().sort((a,b) => b.date.localeCompare(a.date));
+  if (!entries.length) {
+    el.innerHTML = '<p class="empty-s">No sleep entries yet. Log your first night above.</p>';
+    return;
+  }
+  el.innerHTML = entries.map(e => {
+    const durColor = e.duration >= 7 ? 'var(--accent-3)' : e.duration >= 6 ? 'var(--accent-4)' : 'var(--accent-5)';
+    const stars = n => '★'.repeat(n) + '☆'.repeat(5 - n);
+    const d = new Date(e.date + 'T12:00:00');
+    const dateStr = d.toLocaleDateString('en-GB', { weekday:'short', day:'numeric', month:'short' }).toUpperCase();
+    return `
+    <div class="sj-entry">
+      <div class="sj-entry-date">${dateStr}</div>
+      <div class="sj-entry-metrics">
+        <div class="sj-metric-col">
+          <span class="sj-metric-icon">🌙</span>
+          <span class="sj-stars" title="Pre-sleep mood">${stars(e.preSleep)}</span>
+          <span class="sj-label">before</span>
+        </div>
+        <div class="sj-metric-col sj-dur-col">
+          <span class="sj-dur-num" style="color:${durColor}">${e.duration}h</span>
+          <span class="sj-label">sleep</span>
+        </div>
+        <div class="sj-metric-col">
+          <span class="sj-metric-icon">😴</span>
+          <span class="sj-grog-val">${SLEEP_GROG_EMOJIS[e.grogginess]}</span>
+          <span class="sj-label">grog</span>
+        </div>
+        <div class="sj-metric-col">
+          <span class="sj-metric-icon">☀️</span>
+          <span class="sj-stars" title="Post-sleep mood">${stars(e.postSleep)}</span>
+          <span class="sj-label">after</span>
+        </div>
+      </div>
+      ${e.notes ? `<div class="sj-notes">${e.notes}</div>` : ''}
+      <button class="ti-del sj-del" data-sid="${e.id}" title="Delete">✕</button>
+    </div>`;
+  }).join('');
+  el.querySelectorAll('.sj-del').forEach(btn => {
+    btn.addEventListener('click', () => deleteSleepEntry(btn.dataset.sid));
+  });
+}
+
+function renderSleepAverages() {
+  if (!Array.isArray(S.sleepLog) || !S.sleepLog.length) {
+    ['avg-duration','avg-pre','avg-grog','avg-post'].forEach(id => {
+      const el = $(id); if (el) el.textContent = '—';
+    });
+    return;
+  }
+  const recent = S.sleepLog.slice().sort((a,b) => b.date.localeCompare(a.date)).slice(0, 7);
+  const avg = key => (recent.reduce((s,e) => s + e[key], 0) / recent.length).toFixed(1);
+  const durEl = $('avg-duration'); if (durEl) durEl.textContent = avg('duration') + 'h';
+  const preEl = $('avg-pre');      if (preEl) preEl.textContent = avg('preSleep') + '/5';
+  const grEl  = $('avg-grog');     if (grEl)  grEl.textContent  = avg('grogginess') + '/5';
+  const poEl  = $('avg-post');     if (poEl)  poEl.textContent  = avg('postSleep') + '/5';
+}
+
 // ─── DAILY RESET ─────────────────────────────────────────
 function checkDailyReset() {
   const lastRun = localStorage.getItem('hf_gcse_lastrun');
@@ -1252,6 +1376,7 @@ function init() {
   initQuickLinks();
   initFlashcards();
   initTimetable();
+  initSleepJournal();
 
   updateXPDisplay();
   updateStreakDisplay();
