@@ -61,8 +61,8 @@
       <li><button class="nav-btn" data-view="habits">
         <span class="nav-icon">◑</span><span>Daily Habits</span>
       </button></li>
-      <li><button class="nav-btn" data-view="timetable">
-        <span class="nav-icon">◧</span><span>Tomorrow's Plan</span>
+      <li><button class="nav-btn" data-view="sleep">
+        <span class="nav-icon">🌙</span><span>Sleep Journal</span>
       </button></li>
       <li><button class="nav-btn" data-view="flashcards">
         <span class="nav-icon">◇</span><span>Flashcards</span>
@@ -206,10 +206,10 @@
             <div class="subj-bars" id="subj-bars"></div>
           </div>
 
-          <!-- Tomorrow's Plan preview -->
+          <!-- Last Night's Sleep -->
           <div class="card span-6">
-            <div class="card-lbl">TOMORROW'S PLAN <span class="card-lbl-sub">— time-blocked schedule</span></div>
-            <div id="dash-tomorrow-preview"></div>
+            <div class="card-lbl">LAST NIGHT'S SLEEP <span class="card-lbl-sub">— recovery snapshot</span></div>
+            <div id="dash-sleep-preview"></div>
           </div>
 
           <!-- Flashcards due today -->
@@ -472,6 +472,152 @@
             <div class="modal-ft">
               <button class="btn-ghost" id="modal-cancel">Cancel</button>
               <button class="btn-primary" id="modal-save">FORGE HABIT</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══ SLEEP JOURNAL ═══ -->
+      <section class="view" id="view-sleep">
+        <div class="vh">
+          <h1 class="vh-title">SLEEP JOURNAL</h1>
+          <p class="vh-sub">Track your rest. Recovery is where performance is built.</p>
+        </div>
+
+        <div class="sleep-layout">
+          <!-- Log form -->
+          <div class="sleep-main">
+            <div class="card sleep-log-card">
+              <div class="card-lbl">LOG YOUR SLEEP</div>
+              <div class="sleep-form">
+                <div class="sleep-date-row">
+                  <label class="sleep-field-lbl">DATE</label>
+                  <input type="date" class="field-in sleep-date-in" id="sleep-date"/>
+                </div>
+
+                <!-- Pre-sleep mood -->
+                <div class="sleep-metric">
+                  <div class="sleep-metric-hd">
+                    <span class="sleep-metric-icon">🌙</span>
+                    <div>
+                      <div class="sleep-metric-title">HOW I FELT BEFORE SLEEP</div>
+                      <div class="sleep-metric-sub">Mental state at bedtime</div>
+                    </div>
+                    <span class="sleep-rating-val" id="pre-sleep-val">3</span>
+                  </div>
+                  <div class="sleep-slider-wrap">
+                    <input type="range" class="sleep-slider" id="pre-sleep" min="1" max="5" value="3"/>
+                    <div class="sleep-slider-labels">
+                      <span>Anxious</span><span>Calm</span><span>Relaxed</span><span>Peaceful</span><span>Blissful</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Sleep duration -->
+                <div class="sleep-metric">
+                  <div class="sleep-metric-hd">
+                    <span class="sleep-metric-icon">⏱</span>
+                    <div>
+                      <div class="sleep-metric-title">SLEEP DURATION</div>
+                      <div class="sleep-metric-sub">Total hours of sleep</div>
+                    </div>
+                    <span class="sleep-rating-val" id="sleep-dur-val">7h</span>
+                  </div>
+                  <div class="sleep-slider-wrap">
+                    <input type="range" class="sleep-slider sleep-slider--dur" id="sleep-dur" min="2" max="12" step="0.5" value="7"/>
+                    <div class="sleep-slider-labels">
+                      <span>2h</span><span>5h</span><span>7h</span><span>9h</span><span>12h</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Grogginess -->
+                <div class="sleep-metric">
+                  <div class="sleep-metric-hd">
+                    <span class="sleep-metric-icon">😴</span>
+                    <div>
+                      <div class="sleep-metric-title">MORNING GROGGINESS</div>
+                      <div class="sleep-metric-sub">How hard was waking up?</div>
+                    </div>
+                    <span class="sleep-rating-val" id="grogginess-val">3</span>
+                  </div>
+                  <div class="sleep-slider-wrap">
+                    <input type="range" class="sleep-slider sleep-slider--grog" id="grogginess" min="1" max="5" value="3"/>
+                    <div class="sleep-slider-labels">
+                      <span>Snapped awake</span><span>Slight</span><span>Moderate</span><span>Heavy</span><span>Zombie</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Post-sleep mood -->
+                <div class="sleep-metric">
+                  <div class="sleep-metric-hd">
+                    <span class="sleep-metric-icon">☀️</span>
+                    <div>
+                      <div class="sleep-metric-title">HOW I FEEL AFTER SLEEP</div>
+                      <div class="sleep-metric-sub">Energy &amp; mood on waking</div>
+                    </div>
+                    <span class="sleep-rating-val" id="post-sleep-val">3</span>
+                  </div>
+                  <div class="sleep-slider-wrap">
+                    <input type="range" class="sleep-slider" id="post-sleep" min="1" max="5" value="3"/>
+                    <div class="sleep-slider-labels">
+                      <span>Drained</span><span>Low</span><span>OK</span><span>Good</span><span>Energised</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Notes -->
+                <div class="sleep-notes-row">
+                  <label class="sleep-field-lbl">NOTES <span class="sleep-field-opt">(optional)</span></label>
+                  <input class="field-in" id="sleep-notes" placeholder="Dreams, disturbances, bedtime..."/>
+                </div>
+
+                <button class="btn-primary sleep-log-btn" id="sleep-log-btn">💤 LOG SLEEP</button>
+              </div>
+            </div>
+
+            <!-- History -->
+            <div class="card">
+              <div class="card-lbl">SLEEP HISTORY</div>
+              <div id="sleep-history-list"></div>
+            </div>
+          </div>
+
+          <!-- Side panel -->
+          <div class="sleep-side">
+            <div class="card sleep-stats-card">
+              <div class="card-lbl">7-NIGHT AVERAGES</div>
+              <div class="sleep-avg-grid" id="sleep-avg-grid">
+                <div class="sleep-avg-item">
+                  <span class="sleep-avg-n" id="avg-duration">—</span>
+                  <span class="sleep-avg-l">avg hours</span>
+                </div>
+                <div class="sleep-avg-item">
+                  <span class="sleep-avg-n" id="avg-pre">—</span>
+                  <span class="sleep-avg-l">pre-sleep mood</span>
+                </div>
+                <div class="sleep-avg-item">
+                  <span class="sleep-avg-n" id="avg-grog">—</span>
+                  <span class="sleep-avg-l">grogginess</span>
+                </div>
+                <div class="sleep-avg-item">
+                  <span class="sleep-avg-n" id="avg-post">—</span>
+                  <span class="sleep-avg-l">post-sleep mood</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-lbl">SLEEP SCIENCE TIPS</div>
+              <ul class="protocol-list">
+                <li><span class="pi">01</span>Same bedtime every night — your circadian rhythm is a habit.</li>
+                <li><span class="pi">02</span>No screens 30 min before bed. Blue light delays melatonin by 3h.</li>
+                <li><span class="pi">03</span>Cold room (16–19°C) speeds up sleep onset and improves deep sleep.</li>
+                <li><span class="pi">04</span>7–9 hours is the non-negotiable window for GCSE-level cognition.</li>
+                <li><span class="pi">05</span>Avoid caffeine after 2 pm — it has a 5–7 hour half-life.</li>
+                <li><span class="pi">06</span>The night before an exam: sleep &gt; extra revision. Memory consolidates overnight.</li>
+              </ul>
             </div>
           </div>
         </div>
