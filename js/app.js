@@ -725,11 +725,17 @@ function renderExamScheduleList() {
 
 // ─── TODOS ───────────────────────────────────────────────
 let todoFilter = 'all';
+let todoView = 'list'; // 'list' or 'matrix'
 
 function initTodos() {
   $('todo-add').addEventListener('click', addTodo);
   $('todo-in').addEventListener('keydown', e => { if (e.key==='Enter') addTodo(); });
   $('todo-clear').addEventListener('click', clearDoneTodos);
+  $('todo-view-toggle').addEventListener('click', () => {
+    todoView = todoView === 'list' ? 'matrix' : 'list';
+    $('todo-view-toggle').textContent = todoView === 'list' ? '⊞ MATRIX' : '☰ LIST';
+    renderTodos();
+  });
   document.querySelectorAll('.fb[data-tf]').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.fb[data-tf]').forEach(b => b.classList.remove('active'));
@@ -779,52 +785,61 @@ function renderTodos() {
   if (todoFilter==='done') todos=todos.filter(t=>t.done);
   if (todoFilter==='critical') todos=todos.filter(t=>t.priority==='critical');
 
-  const el = $('todos-list');
-  if (!todos.length) { el.innerHTML='<p class="empty-s">No tasks here.</p>'; }
-  else {
-    el.innerHTML = todos.map(t => {
-      const subj = GCSE_SUBJECTS[t.category];
-      const catLabel = subj ? `${subj.icon} ${subj.name.split(' ')[0]}` : t.category.toUpperCase();
-      const dueBadge = getDueBadge(t.dueDate);
-      const subtasksHTML = (t.subtasks && t.subtasks.length) ? `
-        <div class="ti-subtasks">
-          ${t.subtasks.map(st => `
-            <div class="ti-subtask ${st.done?'st-done':''}">
-              <button class="st-check ${st.done?'ck':''}" data-tid="${t.id}" data-sid="${st.id}">${st.done?'✓':''}</button>
-              <span class="st-name">${st.name}</span>
-              <button class="st-del" data-tid="${t.id}" data-dsid="${st.id}">✕</button>
-            </div>`).join('')}
-        </div>` : '';
-      return `
-      <div class="todo-item p-${t.priority} ${t.done?'t-done':''}">
-        <button class="ti-check ${t.done?'ck':''}" data-tid="${t.id}">${t.done?'✓':''}</button>
-        <div class="ti-body">
-          <div class="ti-name">${t.name}</div>
-          <div class="ti-meta">
-            <span class="ti-cat">${catLabel}</span>
-            ${dueBadge}
+  // Toggle between list and matrix views
+  const isList = todoView === 'list';
+  $('todos-list').style.display = isList ? '' : 'none';
+  $('eisenhower-matrix').style.display = isList ? 'none' : '';
+
+  if (isList) {
+    const el = $('todos-list');
+    if (!todos.length) { el.innerHTML='<p class="empty-s">No tasks here.</p>'; }
+    else {
+      el.innerHTML = todos.map(t => {
+        const subj = GCSE_SUBJECTS[t.category];
+        const catLabel = subj ? `${subj.icon} ${subj.name.split(' ')[0]}` : t.category.toUpperCase();
+        const dueBadge = getDueBadge(t.dueDate);
+        const subtasksHTML = (t.subtasks && t.subtasks.length) ? `
+          <div class="ti-subtasks">
+            ${t.subtasks.map(st => `
+              <div class="ti-subtask ${st.done?'st-done':''}">
+                <button class="st-check ${st.done?'ck':''}" data-tid="${t.id}" data-sid="${st.id}">${st.done?'✓':''}</button>
+                <span class="st-name">${st.name}</span>
+                <button class="st-del" data-tid="${t.id}" data-dsid="${st.id}">✕</button>
+              </div>`).join('')}
+          </div>` : '';
+        return `
+        <div class="todo-item p-${t.priority} ${t.done?'t-done':''}">
+          <button class="ti-check ${t.done?'ck':''}" data-tid="${t.id}">${t.done?'✓':''}</button>
+          <div class="ti-body">
+            <div class="ti-name">${t.name}</div>
+            <div class="ti-meta">
+              <span class="ti-cat">${catLabel}</span>
+              ${dueBadge}
+            </div>
+            ${subtasksHTML}
+            <div class="ti-add-subtask">
+              <input placeholder="Add subtask..." data-tid="${t.id}"/>
+              <button data-tid="${t.id}">+</button>
+            </div>
           </div>
-          ${subtasksHTML}
-          <div class="ti-add-subtask">
-            <input placeholder="Add subtask..." data-tid="${t.id}"/>
-            <button data-tid="${t.id}">+</button>
+          <div class="ti-actions">
+            <button class="ti-del" data-dtid="${t.id}" title="Delete">✕</button>
           </div>
-        </div>
-        <div class="ti-actions">
-          <button class="ti-del" data-dtid="${t.id}" title="Delete">✕</button>
-        </div>
-      </div>`;
-    }).join('');
-    el.querySelectorAll('.ti-check').forEach(b => b.addEventListener('click', () => toggleTodo(b.dataset.tid)));
-    el.querySelectorAll('.ti-del').forEach(b => b.addEventListener('click', () => deleteTodo(b.dataset.dtid)));
-    el.querySelectorAll('.st-check').forEach(b => b.addEventListener('click', () => toggleSubtask(b.dataset.tid, b.dataset.sid)));
-    el.querySelectorAll('.st-del').forEach(b => b.addEventListener('click', () => deleteSubtask(b.dataset.tid, b.dataset.dsid)));
-    el.querySelectorAll('.ti-add-subtask button').forEach(b => {
-      b.addEventListener('click', () => addSubtask(b.dataset.tid));
-    });
-    el.querySelectorAll('.ti-add-subtask input').forEach(inp => {
-      inp.addEventListener('keydown', e => { if (e.key==='Enter') addSubtask(inp.dataset.tid); });
-    });
+        </div>`;
+      }).join('');
+      el.querySelectorAll('.ti-check').forEach(b => b.addEventListener('click', () => toggleTodo(b.dataset.tid)));
+      el.querySelectorAll('.ti-del').forEach(b => b.addEventListener('click', () => deleteTodo(b.dataset.dtid)));
+      el.querySelectorAll('.st-check').forEach(b => b.addEventListener('click', () => toggleSubtask(b.dataset.tid, b.dataset.sid)));
+      el.querySelectorAll('.st-del').forEach(b => b.addEventListener('click', () => deleteSubtask(b.dataset.tid, b.dataset.dsid)));
+      el.querySelectorAll('.ti-add-subtask button').forEach(b => {
+        b.addEventListener('click', () => addSubtask(b.dataset.tid));
+      });
+      el.querySelectorAll('.ti-add-subtask input').forEach(inp => {
+        inp.addEventListener('keydown', e => { if (e.key==='Enter') addSubtask(inp.dataset.tid); });
+      });
+    }
+  } else {
+    renderEisenhowerMatrix(todos);
   }
 
   const total = S.todos.length;
@@ -834,6 +849,39 @@ function renderTodos() {
   $('tst-crit').textContent = S.todos.filter(t=>t.priority==='critical'&&!t.done).length;
   $('todo-count').textContent = total > 0 ? `${done}/${total} done` : '';
   $('todo-progress-fill').style.width = total > 0 ? `${(done / total * 100).toFixed(1)}%` : '0%';
+}
+
+// Priority → Eisenhower quadrant mapping
+// The four priority levels map naturally to the four quadrants:
+//   critical → Q1: Urgent & Important   → DO FIRST  (must do immediately)
+//   high     → Q2: Important, Schedulable → SCHEDULE (plan & protect time)
+//   medium   → Q3: Low importance, time-sensitive → DELEGATE (minimise)
+//   low      → Q4: Neither urgent nor important   → ELIMINATE (drop it)
+function renderEisenhowerMatrix(todos) {
+  const quadrants = { q1: [], q2: [], q3: [], q4: [] };
+  todos.forEach(t => {
+    if (t.priority === 'critical') quadrants.q1.push(t);
+    else if (t.priority === 'high') quadrants.q2.push(t);
+    else if (t.priority === 'medium') quadrants.q3.push(t);
+    else quadrants.q4.push(t);
+  });
+  ['q1','q2','q3','q4'].forEach(q => {
+    const el = $(`em-${q}-items`);
+    const tasks = quadrants[q];
+    if (!tasks.length) {
+      el.innerHTML = '<div class="em-empty">No tasks here</div>';
+    } else {
+      el.innerHTML = tasks.map(t => `
+        <div class="em-item ${t.done?'em-done':''}">
+          <button class="em-item-check ${t.done?'ck':''}" data-tid="${t.id}">${t.done?'✓':''}</button>
+          <span class="em-item-name">${t.name}</span>
+        </div>`).join('');
+      el.querySelectorAll('.em-item-check').forEach(b => b.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleTodo(b.dataset.tid);
+      }));
+    }
+  });
 }
 
 function toggleTodo(id) {

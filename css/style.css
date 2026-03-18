@@ -1138,6 +1138,105 @@ body::before {
 }
 .btn-clear:hover { border-color: var(--accent-5); color: var(--accent-5); }
 
+/* ── Eisenhower Matrix ────────────────────────────────────── */
+#eisenhower-matrix { margin-top: 4px; }
+.em-axis-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 0 4px 6px;
+}
+.em-axis-label {
+  font-family: var(--f-mono);
+  font-size: 9px;
+  letter-spacing: 1.5px;
+  color: var(--text-3);
+  text-transform: uppercase;
+}
+.em-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.em-quadrant {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r2);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 140px;
+}
+.em-q1 { border-top: 3px solid var(--accent-5); }
+.em-q2 { border-top: 3px solid var(--accent); }
+.em-q3 { border-top: 3px solid var(--accent-6); }
+.em-q4 { border-top: 3px solid var(--text-3); }
+.em-qh { display: flex; align-items: center; gap: 10px; }
+.em-qbadge {
+  font-family: var(--f-display);
+  font-size: 20px;
+  font-weight: 800;
+  flex-shrink: 0;
+  width: 28px;
+  text-align: center;
+}
+.em-qbadge-1 { color: var(--accent-5); }
+.em-qbadge-2 { color: var(--accent); }
+.em-qbadge-3 { color: var(--accent-6); }
+.em-qbadge-4 { color: var(--text-3); }
+.em-qtitle {
+  font-family: var(--f-display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: var(--text);
+}
+.em-qsub {
+  font-family: var(--f-mono);
+  font-size: 8px;
+  color: var(--text-3);
+  margin-top: 1px;
+}
+.em-qlist { display: flex; flex-direction: column; gap: 5px; flex: 1; }
+.em-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 8px;
+  background: var(--bg-3);
+  border-radius: var(--r);
+  font-size: 12px;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: background .15s;
+}
+.em-item:hover { background: var(--bg-4); }
+.em-item.em-done { opacity: .4; }
+.em-item.em-done .em-item-name { text-decoration: line-through; }
+.em-item-check {
+  width: 14px; height: 14px;
+  border: 1.5px solid var(--border-2);
+  border-radius: 50%;
+  background: none;
+  cursor: pointer;
+  flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 8px;
+  color: transparent;
+  transition: all .15s;
+}
+.em-item-check:hover { border-color: var(--accent-3); background: rgba(52,211,153,.08); }
+.em-item-check.ck { background: var(--accent-3); border-color: var(--accent-3); color: #000; }
+.em-item-name { flex: 1; line-height: 1.3; }
+.em-empty {
+  font-family: var(--f-mono);
+  font-size: 9px;
+  color: var(--text-4);
+  text-align: center;
+  padding: 12px 0;
+  letter-spacing: .5px;
+}
+
 .todo-side { display: flex; flex-direction: column; gap: 14px; }
 .atomic-tip-text { font-size: 12.5px; color: var(--text-3); font-style: italic; line-height: 1.7; }
 
