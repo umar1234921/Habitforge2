@@ -18,7 +18,10 @@ function todayLocalKey() {
   return dateToKey(new Date());
 }
 
-// ─── SM-2 ALGORITHM ──────────────────────────────────────
+// Duration of the card flip CSS transition (must match .fc-card-inner transition in style.css)
+const FC_FLIP_DURATION_MS = 450;
+
+
 const SRS = {
   /**
    * Grade a card and return the updated card object.
@@ -494,6 +497,7 @@ function renderStudyCard() {
   }
 
   const card = _fcStudyQueue[_fcStudyIdx];
+  const wasFlipped = _fcFlipped;
   _fcFlipped  = false;
 
   const done  = _fcStudyIdx;
@@ -501,15 +505,28 @@ function renderStudyCard() {
   $('fc-progress-fill').style.width  = (total ? (done / total) * 100 : 0) + '%';
   $('fc-progress-text').textContent  = `${done} / ${total}`;
 
+  // Update the front face immediately — it's hidden behind the back face
+  // while the unflip animation runs, so there is no visual glitch.
   $('fc-front-text').textContent      = card.front;
   $('fc-front-text-back').textContent = card.front;
-  $('fc-back-text').textContent       = card.back;
 
   $('fc-card-inner').classList.remove('fc-flipped');
   $('fc-flip-btn').classList.remove('fc-hidden');
   $('fc-grade-btns').classList.add('fc-hidden');
 
-  updateGradeHints(card);
+  if (wasFlipped) {
+    // The card was showing the answer side.  Delay updating the back-face
+    // text until the flip animation completes (~450 ms) so the new card's
+    // answer is not briefly visible while the card rotates back to front.
+    setTimeout(() => {
+      $('fc-back-text').textContent = card.back;
+      updateGradeHints(card);
+    }, FC_FLIP_DURATION_MS);
+  } else {
+    // Card was not flipped — safe to update immediately.
+    $('fc-back-text').textContent = card.back;
+    updateGradeHints(card);
+  }
 }
 
   function updateGradeHints(card) {

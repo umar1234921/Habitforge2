@@ -748,7 +748,11 @@ function initTodos() {
 
 function addTodo() {
   const name = $('todo-in').value.trim();
-  if (!name) return;
+  if (!name) {
+    toast('Enter a task name first', 'err');
+    $('todo-in').focus();
+    return;
+  }
   const dueVal = $('todo-due').value;
   S.todos.unshift({
     id:uid(), name, priority:$('todo-pri').value, category:$('todo-cat').value,
@@ -758,6 +762,12 @@ function addTodo() {
   });
   $('todo-in').value = '';
   $('todo-due').value = '';
+  // Reset to list view and 'all' filter so the new task is always immediately visible
+  todoView = 'list';
+  $('todo-view-toggle').textContent = '⊞ MATRIX';
+  todoFilter = 'all';
+  document.querySelectorAll('.fb[data-tf]').forEach(b => b.classList.remove('active'));
+  document.querySelector('.fb[data-tf="all"]').classList.add('active');
   save(); renderTodos(); toast(`Task added`);
 }
 
@@ -796,7 +806,7 @@ function renderTodos() {
     else {
       el.innerHTML = todos.map(t => {
         const subj = GCSE_SUBJECTS[t.category];
-        const catLabel = subj ? `${subj.icon} ${subj.name.split(' ')[0]}` : t.category.toUpperCase();
+        const catLabel = subj ? `${subj.icon} ${subj.name.split(' ')[0]}` : (t.category || 'General').toUpperCase();
         const dueBadge = getDueBadge(t.dueDate);
         const subtasksHTML = (t.subtasks && t.subtasks.length) ? `
           <div class="ti-subtasks">
