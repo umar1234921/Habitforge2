@@ -392,6 +392,7 @@
               </div>
               <div style="display:flex;gap:8px;align-items:center">
                 <span class="todo-count" id="todo-count"></span>
+                <button class="btn-clear" id="todo-view-toggle" title="Switch between list and matrix view">⊞ MATRIX</button>
                 <button class="btn-clear" id="todo-clear" title="Remove completed tasks">CLEAR DONE</button>
               </div>
             </div>
@@ -400,6 +401,55 @@
               <span class="mit-text">Most Important Task — nail this before anything else.</span>
             </div>
             <div id="todos-list"></div>
+            <!-- Eisenhower Matrix -->
+            <div id="eisenhower-matrix" style="display:none">
+              <div class="em-axis-row">
+                <span class="em-axis-label">⚡ URGENT</span>
+                <span class="em-axis-label em-axis-right">⏳ NOT URGENT</span>
+              </div>
+              <div class="em-grid">
+                <div class="em-quadrant em-q1">
+                  <div class="em-qh">
+                    <span class="em-qbadge em-qbadge-1">I</span>
+                    <div>
+                      <div class="em-qtitle">DO FIRST</div>
+                      <div class="em-qsub">Urgent · Important</div>
+                    </div>
+                  </div>
+                  <div class="em-qlist" id="em-q1-items"></div>
+                </div>
+                <div class="em-quadrant em-q2">
+                  <div class="em-qh">
+                    <span class="em-qbadge em-qbadge-2">II</span>
+                    <div>
+                      <div class="em-qtitle">SCHEDULE</div>
+                      <div class="em-qsub">Not Urgent · Important</div>
+                    </div>
+                  </div>
+                  <div class="em-qlist" id="em-q2-items"></div>
+                </div>
+                <div class="em-quadrant em-q3">
+                  <div class="em-qh">
+                    <span class="em-qbadge em-qbadge-3">III</span>
+                    <div>
+                      <div class="em-qtitle">DELEGATE</div>
+                      <div class="em-qsub">Urgent · Not Important</div>
+                    </div>
+                  </div>
+                  <div class="em-qlist" id="em-q3-items"></div>
+                </div>
+                <div class="em-quadrant em-q4">
+                  <div class="em-qh">
+                    <span class="em-qbadge em-qbadge-4">IV</span>
+                    <div>
+                      <div class="em-qtitle">ELIMINATE</div>
+                      <div class="em-qsub">Not Urgent · Not Important</div>
+                    </div>
+                  </div>
+                  <div class="em-qlist" id="em-q4-items"></div>
+                </div>
+              </div>
+            </div>
           </div>
           <div class="todo-side">
             <div class="card">
