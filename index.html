@@ -545,6 +545,18 @@
                   <input type="date" class="field-in sleep-date-in" id="sleep-date"/>
                 </div>
 
+                <!-- Bed & wake times -->
+                <div class="sleep-time-row">
+                  <div class="sleep-time-field">
+                    <label class="sleep-field-lbl">🌙 BED TIME</label>
+                    <input type="time" class="field-in sleep-time-in" id="sleep-bedtime"/>
+                  </div>
+                  <div class="sleep-time-field">
+                    <label class="sleep-field-lbl">☀️ WAKE TIME</label>
+                    <input type="time" class="field-in sleep-time-in" id="sleep-waketime"/>
+                  </div>
+                </div>
+
                 <!-- Pre-sleep mood -->
                 <div class="sleep-metric">
                   <div class="sleep-metric-hd">
@@ -569,7 +581,7 @@
                     <span class="sleep-metric-tag">DUR</span>
                     <div>
                       <div class="sleep-metric-title">SLEEP DURATION</div>
-                      <div class="sleep-metric-sub">Total hours of sleep</div>
+                      <div class="sleep-metric-sub">Hours of sleep — set manually or auto-filled from your bed/wake times</div>
                     </div>
                     <span class="sleep-rating-val" id="sleep-dur-val">7h</span>
                   </div>
@@ -631,6 +643,33 @@
             <div class="card">
               <div class="card-lbl">SLEEP HISTORY</div>
               <div id="sleep-history-list"></div>
+            </div>
+
+            <!-- Nap Tracker -->
+            <div class="card sleep-nap-card">
+              <div class="card-lbl">NAP TRACKER</div>
+              <div class="nap-form">
+                <div class="nap-form-row">
+                  <div class="nap-field">
+                    <label class="sleep-field-lbl">DATE</label>
+                    <input type="date" class="field-in" id="nap-date"/>
+                  </div>
+                  <div class="nap-field">
+                    <label class="sleep-field-lbl">START TIME <span class="sleep-field-opt">(opt)</span></label>
+                    <input type="time" class="field-in" id="nap-start"/>
+                  </div>
+                  <div class="nap-field">
+                    <label class="sleep-field-lbl">DURATION (mins)</label>
+                    <input type="number" class="field-in" id="nap-dur" min="5" max="180" step="5" placeholder="e.g. 20"/>
+                  </div>
+                </div>
+                <div class="sleep-notes-row">
+                  <label class="sleep-field-lbl">NOTES <span class="sleep-field-opt">(optional)</span></label>
+                  <input class="field-in" id="nap-note" placeholder="How refreshed did you feel?"/>
+                </div>
+                <button class="btn-primary nap-log-btn" id="nap-log-btn">LOG NAP 😴</button>
+              </div>
+              <div id="nap-history-list"></div>
             </div>
           </div>
 
