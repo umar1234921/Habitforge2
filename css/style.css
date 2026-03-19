@@ -2855,6 +2855,87 @@ body::before {
 }
 .sj-entry:hover .sj-del { opacity: 1; }
 
+/* Bed/wake time badges in history */
+.sj-sleep-times {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.sj-time-badge {
+  font-family: var(--f-mono);
+  font-size: 10px;
+  letter-spacing: .5px;
+  color: var(--text-3);
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 2px 8px;
+}
+
+/* Bed/wake time inputs row in log form */
+.sleep-time-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.sleep-time-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.sleep-time-in { width: 100%; }
+
+/* Nap tracker card */
+.sleep-nap-card {
+  border-top: 3px solid var(--accent-4);
+}
+.nap-form { display: flex; flex-direction: column; gap: 12px; }
+.nap-form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 12px;
+  align-items: end;
+}
+@media (max-width: 640px) {
+  .nap-form-row,
+  .sleep-time-row { grid-template-columns: 1fr 1fr; }
+}
+.nap-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.nap-log-btn { width: 100%; letter-spacing: 2px; padding: 10px; }
+
+/* Nap history entries */
+#nap-history-list { margin-top: 16px; }
+.nap-entry {
+  position: relative;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.nap-entry:last-child { border-bottom: none; }
+.nap-entry-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.nap-entry-date {
+  font-family: var(--f-mono);
+  font-size: 10px;
+  letter-spacing: 1px;
+  color: var(--text-3);
+}
+.nap-entry-dur {
+  font-family: var(--f-display);
+  font-size: 16px;
+  font-weight: 800;
+}
+
 /* Stats card */
 .sleep-avg-grid {
   display: grid;

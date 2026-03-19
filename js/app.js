@@ -333,7 +333,7 @@ function renderDashSleepPreview() {
       <div class="dsp-entry">
         <div class="dsp-date">${last.date}</div>
         <div class="dsp-row"><span class="dsp-tag">PRE</span><span class="dsp-lbl">Before sleep</span><span class="dsp-val">${last.preSleep}/5</span></div>
-        <div class="dsp-row"><span class="dsp-tag">DUR</span><span class="dsp-lbl">Duration</span><span class="dsp-val">${last.duration}h</span></div>
+        <div class="dsp-row"><span class="dsp-tag">DUR</span><span class="dsp-lbl">Duration</span><span class="dsp-val">${last.duration}h${last.bedtime && last.wakeTime ? ` (${last.bedtime}–${last.wakeTime})` : ''}</span></div>
         <div class="dsp-row"><span class="dsp-tag dsp-tag--grog">GRG</span><span class="dsp-lbl">Grogginess</span><span class="dsp-val">${SLEEP_GROG_LABELS[last.grogginess] ?? last.grogginess}</span></div>
         <div class="dsp-row"><span class="dsp-tag dsp-tag--post">PST</span><span class="dsp-lbl">After sleep</span><span class="dsp-val">${last.postSleep}/5</span></div>
       </div>`;
@@ -748,7 +748,11 @@ function initTodos() {
 
 function addTodo() {
   const name = $('todo-in').value.trim();
-  if (!name) return;
+  if (!name) {
+    toast('Enter a task name first', 'err');
+    $('todo-in').focus();
+    return;
+  }
   const dueVal = $('todo-due').value;
   S.todos.unshift({
     id:uid(), name, priority:$('todo-pri').value, category:$('todo-cat').value,
@@ -758,6 +762,12 @@ function addTodo() {
   });
   $('todo-in').value = '';
   $('todo-due').value = '';
+  // Reset to list view and 'all' filter so the new task is always immediately visible
+  todoView = 'list';
+  $('todo-view-toggle').textContent = '⊞ MATRIX';
+  todoFilter = 'all';
+  document.querySelectorAll('.fb[data-tf]').forEach(b => b.classList.remove('active'));
+  document.querySelector('.fb[data-tf="all"]').classList.add('active');
   save(); renderTodos(); toast(`Task added`);
 }
 
@@ -796,7 +806,7 @@ function renderTodos() {
     else {
       el.innerHTML = todos.map(t => {
         const subj = GCSE_SUBJECTS[t.category];
-        const catLabel = subj ? `${subj.icon} ${subj.name.split(' ')[0]}` : t.category.toUpperCase();
+        const catLabel = subj ? `${subj.icon} ${subj.name.split(' ')[0]}` : (t.category || 'General').toUpperCase();
         const dueBadge = getDueBadge(t.dueDate);
         const subtasksHTML = (t.subtasks && t.subtasks.length) ? `
           <div class="ti-subtasks">
@@ -1170,12 +1180,19 @@ const SLEEP_GROG_LABELS  = ['','Wide awake','Slight','Moderate','Heavy','Zombie'
 const SLEEP_MOOD_EMOJIS  = ['','😣','😕','😐','🙂','😄'];
 const SLEEP_GROG_EMOJIS  = ['','⚡','😑','😪','😵','🧟'];
 
+// Nap quality thresholds (minutes)
+const NAP_LONG_MINS  = 90; // full sleep cycle — yellow accent
+const NAP_SHORT_MINS = 20; // power nap — green accent
+
 function initSleepJournal() {
   if (!Array.isArray(S.sleepLog)) S.sleepLog = [];
+  if (!Array.isArray(S.napLog))   S.napLog   = [];
 
   // Set date to today by default
   const dateIn = $('sleep-date');
   if (dateIn) dateIn.value = todayKey();
+  const napDateIn = $('nap-date');
+  if (napDateIn) napDateIn.value = todayKey();
 
   // Wire up sliders to show live values
   function wireSlider(id, valId, formatter) {
@@ -1196,26 +1213,51 @@ function initSleepJournal() {
   wireSlider('grogginess',  'grogginess-val', v => `${v}/5`);
   wireSlider('post-sleep',  'post-sleep-val', v => `${v}/5`);
 
+  // Auto-calculate duration from bed/wake times
+  function autoCalcDuration() {
+    const bed  = $('sleep-bedtime')?.value;
+    const wake = $('sleep-waketime')?.value;
+    if (!bed || !wake) return;
+    const [bh, bm] = bed.split(':').map(Number);
+    let   [wh, wm] = wake.split(':').map(Number);
+    let totalMins = (wh * 60 + wm) - (bh * 60 + bm);
+    if (totalMins <= 0) totalMins += 24 * 60; // crossed midnight
+    const hours = Math.round(totalMins / 30) * 0.5; // round to nearest 0.5 h (30-min blocks)
+    const sl = $('sleep-dur');
+    const vl = $('sleep-dur-val');
+    if (!sl || !vl) return;
+    const clamped = Math.min(12, Math.max(2, hours));
+    sl.value = clamped;
+    vl.textContent = `${clamped}h`;
+    const pct = ((clamped - 2) / (12 - 2)) * 100;
+    sl.style.setProperty('--val', pct + '%');
+  }
+  $('sleep-bedtime')?.addEventListener('change', autoCalcDuration);
+  $('sleep-waketime')?.addEventListener('change', autoCalcDuration);
+
   $('sleep-log-btn').addEventListener('click', logSleep);
+  $('nap-log-btn').addEventListener('click', logNap);
   renderSleepJournal();
 }
 
 function logSleep() {
   if (!Array.isArray(S.sleepLog)) S.sleepLog = [];
   const date = $('sleep-date').value || todayKey();
-  const preSleep  = parseInt($('pre-sleep').value);
-  const duration  = parseFloat($('sleep-dur').value);
+  const preSleep   = parseInt($('pre-sleep').value);
+  const duration   = parseFloat($('sleep-dur').value);
   const grogginess = parseInt($('grogginess').value);
-  const postSleep = parseInt($('post-sleep').value);
-  const notes     = $('sleep-notes').value.trim();
+  const postSleep  = parseInt($('post-sleep').value);
+  const notes      = $('sleep-notes').value.trim();
+  const bedtime    = $('sleep-bedtime')?.value || '';
+  const wakeTime   = $('sleep-waketime')?.value || '';
 
   // Prevent duplicate for same date — update existing
   const existing = S.sleepLog.find(e => e.date === date);
   if (existing) {
-    Object.assign(existing, { preSleep, duration, grogginess, postSleep, notes });
+    Object.assign(existing, { preSleep, duration, grogginess, postSleep, notes, bedtime, wakeTime });
     toast('Sleep entry updated ✓');
   } else {
-    S.sleepLog.unshift({ id: uid(), date, preSleep, duration, grogginess, postSleep, notes });
+    S.sleepLog.unshift({ id: uid(), date, preSleep, duration, grogginess, postSleep, notes, bedtime, wakeTime });
     toast('Sleep logged 💤');
   }
   save();
@@ -1230,10 +1272,73 @@ function deleteSleepEntry(id) {
   renderDashSleepPreview();
 }
 
+// ─── NAP TRACKER ──────────────────────────────────────────
+function logNap() {
+  if (!Array.isArray(S.napLog)) S.napLog = [];
+  const date        = $('nap-date')?.value || todayKey();
+  const startTime   = $('nap-start')?.value || '';
+  const durationMins = parseInt($('nap-dur')?.value);
+  const note        = $('nap-note')?.value.trim() || '';
+
+  if (!durationMins || durationMins < 1) {
+    toast('Enter a nap duration in minutes', 'err');
+    $('nap-dur')?.focus();
+    return;
+  }
+
+  S.napLog.unshift({ id: uid(), date, startTime, durationMins, note });
+  $('nap-dur').value  = '';
+  $('nap-start').value = '';
+  $('nap-note').value  = '';
+  save();
+  renderNapLog();
+  toast(`Nap logged 😴`);
+}
+
+function deleteNap(id) {
+  S.napLog = S.napLog.filter(n => n.id !== id);
+  save();
+  renderNapLog();
+}
+
+function renderNapLog() {
+  const el = $('nap-history-list');
+  if (!el) return;
+  if (!Array.isArray(S.napLog) || !S.napLog.length) {
+    el.innerHTML = '<p class="empty-s">No naps logged yet.</p>';
+    return;
+  }
+  const entries = S.napLog.slice().sort((a, b) => {
+    const dc = b.date.localeCompare(a.date);
+    if (dc !== 0) return dc;
+    return (b.startTime || '').localeCompare(a.startTime || '');
+  });
+  el.innerHTML = entries.map(n => {
+    const d = new Date(n.date + 'T12:00:00');
+    const dateStr = d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }).toUpperCase();
+    const timeStr = n.startTime ? ` @ ${n.startTime}` : '';
+    const qualColor = n.durationMins >= NAP_LONG_MINS ? 'var(--accent-4)' : n.durationMins >= NAP_SHORT_MINS ? 'var(--accent-3)' : 'var(--text-3)';
+    return `
+    <div class="nap-entry">
+      <div class="nap-entry-top">
+        <span class="nap-entry-date">${dateStr}${timeStr}</span>
+        <span class="nap-entry-dur" style="color:${qualColor}">${n.durationMins} min</span>
+      </div>
+      ${n.note ? `<div class="sj-notes">${n.note}</div>` : ''}
+      <button class="ti-del sj-del" data-nid="${n.id}" title="Delete">✕</button>
+    </div>`;
+  }).join('');
+  el.querySelectorAll('.sj-del').forEach(btn => {
+    btn.addEventListener('click', () => deleteNap(btn.dataset.nid));
+  });
+}
+
 function renderSleepJournal() {
   if (!Array.isArray(S.sleepLog)) S.sleepLog = [];
+  if (!Array.isArray(S.napLog))   S.napLog   = [];
   renderSleepHistory();
   renderSleepAverages();
+  renderNapLog();
 }
 
 function renderSleepHistory() {
@@ -1249,9 +1354,13 @@ function renderSleepHistory() {
     const stars = n => '★'.repeat(n) + '☆'.repeat(5 - n);
     const d = new Date(e.date + 'T12:00:00');
     const dateStr = d.toLocaleDateString('en-GB', { weekday:'short', day:'numeric', month:'short' }).toUpperCase();
+    const sleepTimes = (e.bedtime || e.wakeTime)
+      ? `<div class="sj-sleep-times">${e.bedtime ? `<span class="sj-time-badge">🌙 ${e.bedtime}</span>` : ''}${e.wakeTime ? `<span class="sj-time-badge">☀️ ${e.wakeTime}</span>` : ''}</div>`
+      : '';
     return `
     <div class="sj-entry">
       <div class="sj-entry-date">${dateStr}</div>
+      ${sleepTimes}
       <div class="sj-entry-metrics">
         <div class="sj-metric-col">
           <span class="sj-tag">PRE</span>
