@@ -329,29 +329,11 @@ function renderDashSleepPreview() {
   if (!last) {
     el.innerHTML = `<div class="dtp-empty"><span class="dtp-msg">No sleep logged yet — <button class="dtp-link" data-view="sleep">log tonight →</button></span></div>`;
   } else {
-    const napsForDate = Array.isArray(S.napLog) ? S.napLog.filter(n => n.date === last.date) : [];
-    const napMins     = napsForDate.reduce((s, n) => s + (n.durationMins || 0), 0);
-    const totalH      = +(last.duration + napMins / 60).toFixed(1);
-    const totalColor  = totalH >= 8 ? 'var(--accent-3)' : totalH >= 7 ? 'var(--accent-4)' : 'var(--accent-5)';
-    const arcSvg      = buildSleepArc(last, napsForDate);
-
-    const napBadge = napMins > 0
-      ? `<span class="dsp-total-nap">+ ${napMins} min nap</span>
-         <span class="dsp-total-combined" style="color:${totalColor}">= ${totalH}h</span>`
-      : '';
-    const totalBadge = napMins > 0
-      ? `<span class="dsp-total-main" style="color:${totalColor}">${last.duration}h</span>
-         ${napBadge}
-         <span class="dsp-total-label">total</span>`
-      : `<span class="dsp-total-main" style="color:${totalColor}">${last.duration}h</span>
-         <span class="dsp-total-label">sleep</span>`;
-
     el.innerHTML = `
       <div class="dsp-entry">
         <div class="dsp-date">${last.date}</div>
-        <div class="dsp-timeline-wrap">${arcSvg}</div>
-        <div class="dsp-total-row">${totalBadge}</div>
         <div class="dsp-row"><span class="dsp-tag">PRE</span><span class="dsp-lbl">Before sleep</span><span class="dsp-val">${last.preSleep}/5</span></div>
+        <div class="dsp-row"><span class="dsp-tag">DUR</span><span class="dsp-lbl">Duration</span><span class="dsp-val">${last.duration}h${last.bedtime && last.wakeTime ? ` (${last.bedtime}–${last.wakeTime})` : ''}</span></div>
         <div class="dsp-row"><span class="dsp-tag dsp-tag--grog">GRG</span><span class="dsp-lbl">Grogginess</span><span class="dsp-val">${SLEEP_GROG_LABELS[last.grogginess] ?? last.grogginess}</span></div>
         <div class="dsp-row"><span class="dsp-tag dsp-tag--post">PST</span><span class="dsp-lbl">After sleep</span><span class="dsp-val">${last.postSleep}/5</span></div>
       </div>`;
@@ -1198,165 +1180,6 @@ const SLEEP_GROG_LABELS  = ['','Wide awake','Slight','Moderate','Heavy','Zombie'
 const SLEEP_MOOD_EMOJIS  = ['','😣','😕','😐','🙂','😄'];
 const SLEEP_GROG_EMOJIS  = ['','⚡','😑','😪','😵','🧟'];
 
-// ── Sleep helpers ────────────────────────────────────────
-
-/** Returns total nap minutes for a given date (YYYY-MM-DD). */
-function getNapMinsForDate(date) {
-  if (!Array.isArray(S.napLog)) return 0;
-  return S.napLog
-    .filter(n => n.date === date)
-    .reduce((sum, n) => sum + (n.durationMins || 0), 0);
-}
-
-/**
- * Builds an SVG sleep timeline visual.
- * Shows a horizontal bar from 20:00 → 10:00 (14 h night window)
- * with the main sleep block highlighted, plus a daytime nap strip.
- *
- * @param {object} entry   - sleep log entry { bedtime, wakeTime, duration, … }
- * @param {Array}  naps    - array of nap entries for the same date
- * @returns {string} SVG HTML string
- */
-function buildSleepArc(entry, naps) {
-  const W = 440, H = 92;
-  const NIGHT_START       = 20;   // 20:00
-  const NIGHT_HOURS       = 14;   // 20:00 → 10:00 next day
-  const MORNING_CUTOFF_HOUR = 10; // hours 0–9 belong to "next morning"
-  const PAD_L = 28, PAD_R = 28;
-  const TRACK_W = W - PAD_L - PAD_R;
-  const BAR_Y   = 36;
-  const BAR_H   = 22;
-
-  // Midnight fraction within the 14-hour window: (24:00 - 20:00) / 14 = 4/14
-  const MIDNIGHT_FRAC = (24 - NIGHT_START) / NIGHT_HOURS;
-
-  /** Convert "HH:MM" → SVG x position within the night track. */
-  function timeToX(timeStr) {
-    if (!timeStr) return null;
-    const [h, m] = timeStr.split(':').map(Number);
-    // Hours 0–(MORNING_CUTOFF_HOUR-1) belong to "next morning"
-    const norm = h < MORNING_CUTOFF_HOUR ? h + 24 : h;
-    if (norm < NIGHT_START) return null;
-    const elapsed = (norm - NIGHT_START) * 60 + m;
-    const fraction = Math.min(1, elapsed / (NIGHT_HOURS * 60));
-    return PAD_L + fraction * TRACK_W;
-  }
-
-  let bedX  = entry.bedtime  ? timeToX(entry.bedtime)  : null;
-  let wakeX = entry.wakeTime ? timeToX(entry.wakeTime) : null;
-
-  // Fallback: estimate block position from duration when times absent
-  if (bedX === null && wakeX === null) {
-    const durFrac = (entry.duration || 7) / NIGHT_HOURS;
-    bedX  = PAD_L + (MIDNIGHT_FRAC - durFrac / 2) * TRACK_W;
-    wakeX = PAD_L + (MIDNIGHT_FRAC + durFrac / 2) * TRACK_W;
-  } else if (bedX === null) {
-    bedX  = wakeX - (entry.duration / NIGHT_HOURS) * TRACK_W;
-  } else if (wakeX === null) {
-    wakeX = bedX  + (entry.duration / NIGHT_HOURS) * TRACK_W;
-  }
-  bedX  = Math.max(PAD_L, Math.min(W - PAD_R, bedX));
-  wakeX = Math.max(PAD_L, Math.min(W - PAD_R, wakeX));
-
-  // Tick marks every 2 hours
-  const tickHours = [20, 22, 0, 2, 4, 6, 8, 10];
-  const ticks = tickHours.map(h => {
-    const norm = h < MORNING_CUTOFF_HOUR ? h + 24 : h;
-    const x = PAD_L + ((norm - NIGHT_START) / NIGHT_HOURS) * TRACK_W;
-    return { x, label: String(h).padStart(2, '0') + ':00' };
-  });
-
-  // Daytime nap blocks (08:00–20:00 window on the same date)
-  const DAY_START = 8, DAY_END = 20, DAY_HOURS = 12;
-  const napBlocks = (naps || []).map(n => {
-    if (!n.startTime) return null;
-    const [h, m] = n.startTime.split(':').map(Number);
-    if (h < DAY_START || h >= DAY_END) return null;
-    const posFrac = ((h - DAY_START) * 60 + m) / (DAY_HOURS * 60);
-    const durFrac = n.durationMins / (DAY_HOURS * 60);
-    return {
-      x: PAD_L + posFrac * TRACK_W,
-      w: Math.max(10, durFrac * TRACK_W),
-      mins: n.durationMins,
-    };
-  }).filter(Boolean);
-
-  const totalNapMins = (naps || []).reduce((s, n) => s + (n.durationMins || 0), 0);
-  const hasNapStrip  = napBlocks.length > 0;
-  const napStripY    = BAR_Y + BAR_H + 24;
-  const svgH         = hasNapStrip ? napStripY + 28 : H;
-
-  const escBedtime  = entry.bedtime  || '';
-  const escWakeTime = entry.wakeTime || '';
-
-  return `<svg viewBox="0 0 ${W} ${svgH}" xmlns="http://www.w3.org/2000/svg"
-    class="sleep-arc-svg" aria-label="Sleep timeline">
-  <!-- Background track -->
-  <rect x="${PAD_L}" y="${BAR_Y}" width="${TRACK_W}" height="${BAR_H}"
-        fill="rgba(255,255,255,0.04)" rx="2"/>
-  <!-- Sleep block -->
-  <rect x="${Math.min(bedX, wakeX)}" y="${BAR_Y}"
-        width="${Math.abs(wakeX - bedX)}" height="${BAR_H}"
-        fill="var(--accent)" opacity="0.72" rx="2"/>
-  <!-- REM / depth gradient overlay -->
-  <rect x="${Math.min(bedX, wakeX)}" y="${BAR_Y}"
-        width="${Math.abs(wakeX - bedX)}" height="${BAR_H}"
-        fill="url(#depthGrad)" opacity="0.3" rx="2"/>
-  <defs>
-    <linearGradient id="depthGrad" x1="0" x2="0" y1="0" y2="1">
-      <stop offset="0%"   stop-color="white" stop-opacity="0.2"/>
-      <stop offset="50%"  stop-color="black" stop-opacity="0.3"/>
-      <stop offset="100%" stop-color="white" stop-opacity="0.1"/>
-    </linearGradient>
-  </defs>
-  <!-- Tick marks -->
-  ${ticks.map(t => `
-  <line x1="${t.x}" y1="${BAR_Y + BAR_H + 2}" x2="${t.x}" y2="${BAR_Y + BAR_H + 7}"
-        stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
-  <text x="${t.x}" y="${BAR_Y + BAR_H + 17}" font-size="7"
-        fill="rgba(255,255,255,0.2)" text-anchor="middle"
-        font-family="JetBrains Mono,monospace">${t.label}</text>
-  `).join('')}
-  <!-- Moon -->
-  <text x="${PAD_L - 8}" y="${BAR_Y + 15}" font-size="12" text-anchor="middle">🌙</text>
-  <!-- Sun -->
-  <text x="${W - PAD_R + 8}" y="${BAR_Y + 15}" font-size="12" text-anchor="middle">☀️</text>
-  <!-- Bedtime marker -->
-  ${escBedtime ? `
-  <line x1="${bedX}" y1="${BAR_Y - 5}" x2="${bedX}" y2="${BAR_Y}"
-        stroke="var(--accent)" stroke-width="1.5" opacity="0.8"/>
-  <text x="${bedX}" y="${BAR_Y - 8}" font-size="7.5" fill="var(--accent)"
-        text-anchor="middle" font-family="JetBrains Mono,monospace">${escBedtime}</text>
-  ` : ''}
-  <!-- Wake marker -->
-  ${escWakeTime ? `
-  <line x1="${wakeX}" y1="${BAR_Y - 5}" x2="${wakeX}" y2="${BAR_Y}"
-        stroke="var(--accent-3)" stroke-width="1.5" opacity="0.8"/>
-  <text x="${wakeX}" y="${BAR_Y - 8}" font-size="7.5" fill="var(--accent-3)"
-        text-anchor="middle" font-family="JetBrains Mono,monospace">${escWakeTime}</text>
-  ` : ''}
-  <!-- Nap strip -->
-  ${hasNapStrip ? `
-  <text x="${PAD_L}" y="${napStripY - 4}" font-size="7" fill="rgba(255,255,255,0.22)"
-        font-family="JetBrains Mono,monospace" letter-spacing="1">DAYTIME NAPS</text>
-  <rect x="${PAD_L}" y="${napStripY}" width="${TRACK_W}" height="12"
-        fill="rgba(255,255,255,0.03)" rx="2"/>
-  ${napBlocks.map(b => `
-  <rect x="${b.x}" y="${napStripY}" width="${b.w}" height="12"
-        fill="var(--accent-4)" opacity="0.7" rx="2"/>
-  <text x="${b.x + b.w / 2}" y="${napStripY + 8.5}" font-size="6.5"
-        fill="rgba(0,0,0,0.75)" text-anchor="middle"
-        font-family="JetBrains Mono,monospace">${b.mins}m</text>
-  `).join('')}
-  <text x="${PAD_L}" y="${napStripY + 21}" font-size="7"
-        fill="rgba(255,255,255,0.15)" font-family="JetBrains Mono,monospace">08:00</text>
-  <text x="${W - PAD_R}" y="${napStripY + 21}" font-size="7"
-        fill="rgba(255,255,255,0.15)" font-family="JetBrains Mono,monospace"
-        text-anchor="end">20:00</text>
-  ` : ''}
-</svg>`;
-}
-
 // Nap quality thresholds (minutes)
 const NAP_LONG_MINS  = 90; // full sleep cycle — yellow accent
 const NAP_SHORT_MINS = 20; // power nap — green accent
@@ -1469,9 +1292,6 @@ function logNap() {
   $('nap-note').value  = '';
   save();
   renderNapLog();
-  renderSleepHistory();   // refresh history to show updated nap totals
-  renderSleepAverages();  // refresh averages with nap included
-  renderDashSleepPreview();
   toast(`Nap logged 😴`);
 }
 
@@ -1479,9 +1299,6 @@ function deleteNap(id) {
   S.napLog = S.napLog.filter(n => n.id !== id);
   save();
   renderNapLog();
-  renderSleepHistory();
-  renderSleepAverages();
-  renderDashSleepPreview();
 }
 
 function renderNapLog() {
@@ -1537,31 +1354,13 @@ function renderSleepHistory() {
     const stars = n => '★'.repeat(n) + '☆'.repeat(5 - n);
     const d = new Date(e.date + 'T12:00:00');
     const dateStr = d.toLocaleDateString('en-GB', { weekday:'short', day:'numeric', month:'short' }).toUpperCase();
-
-    // Nap data for this date
-    const napsForDate  = Array.isArray(S.napLog) ? S.napLog.filter(n => n.date === e.date) : [];
-    const napMins      = napsForDate.reduce((s, n) => s + (n.durationMins || 0), 0);
-    const totalH       = +(e.duration + napMins / 60).toFixed(1);
-    const totalColor   = totalH >= 8 ? 'var(--accent-3)' : totalH >= 7 ? 'var(--accent-4)' : 'var(--accent-5)';
-
-    // Sleep arc timeline SVG
-    const arcSvg = buildSleepArc(e, napsForDate);
-
-    // Nap/total line
-    const napLine = napMins > 0
-      ? `<div class="sleep-total-line">
-          <span class="sleep-total-main" style="color:${durColor}">${e.duration}h</span>
-          <span class="sleep-total-nap">+ ${napMins} min nap${napsForDate.length > 1 ? 's' : ''}</span>
-          <span class="sleep-total-combined" style="color:${totalColor}">= ${totalH}h</span>
-          <span class="sleep-total-label">total</span>
-        </div>`
+    const sleepTimes = (e.bedtime || e.wakeTime)
+      ? `<div class="sj-sleep-times">${e.bedtime ? `<span class="sj-time-badge">🌙 ${e.bedtime}</span>` : ''}${e.wakeTime ? `<span class="sj-time-badge">☀️ ${e.wakeTime}</span>` : ''}</div>`
       : '';
-
     return `
     <div class="sj-entry">
       <div class="sj-entry-date">${dateStr}</div>
-      <div class="sleep-arc-wrap">${arcSvg}</div>
-      ${napLine}
+      ${sleepTimes}
       <div class="sj-entry-metrics">
         <div class="sj-metric-col">
           <span class="sj-tag">PRE</span>
@@ -1570,7 +1369,7 @@ function renderSleepHistory() {
         </div>
         <div class="sj-metric-col sj-dur-col">
           <span class="sj-dur-num" style="color:${durColor}">${e.duration}h</span>
-          <span class="sj-label">night sleep</span>
+          <span class="sj-label">sleep</span>
         </div>
         <div class="sj-metric-col">
           <span class="sj-tag sj-tag--grog">GRG</span>
@@ -1597,33 +1396,14 @@ function renderSleepAverages() {
     ['avg-duration','avg-pre','avg-grog','avg-post'].forEach(id => {
       const el = $(id); if (el) el.textContent = '—';
     });
-    const napNoteEl = $('avg-nap-note');
-    if (napNoteEl) napNoteEl.textContent = '';
     return;
   }
   const recent = S.sleepLog.slice().sort((a,b) => b.date.localeCompare(a.date)).slice(0, 7);
   const avg = key => (recent.reduce((s,e) => s + e[key], 0) / recent.length).toFixed(1);
-
-  // Include nap minutes in average duration
-  const avgNightH    = parseFloat(avg('duration'));
-  const avgNapMins   = recent.reduce((s, e) => s + getNapMinsForDate(e.date), 0) / recent.length;
-  const avgTotalH    = (avgNightH + avgNapMins / 60).toFixed(1);
-  const hasNaps      = avgNapMins > 0;
-
-  const durEl = $('avg-duration');
-  if (durEl) durEl.textContent = hasNaps ? `${avgTotalH}h` : `${avgNightH}h`;
-
+  const durEl = $('avg-duration'); if (durEl) durEl.textContent = avg('duration') + 'h';
   const preEl = $('avg-pre');      if (preEl) preEl.textContent = avg('preSleep') + '/5';
   const grEl  = $('avg-grog');     if (grEl)  grEl.textContent  = avg('grogginess') + '/5';
   const poEl  = $('avg-post');     if (poEl)  poEl.textContent  = avg('postSleep') + '/5';
-
-  // Show nap breakdown note
-  const napNoteEl = $('avg-nap-note');
-  if (napNoteEl) {
-    napNoteEl.textContent = hasNaps
-      ? `Avg includes ~${Math.round(avgNapMins)} min nap · ${avgNightH}h night + ${(avgNapMins/60).toFixed(1)}h naps`
-      : '';
-  }
 }
 
 // ─── DAILY RESET ─────────────────────────────────────────
