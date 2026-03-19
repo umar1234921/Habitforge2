@@ -3010,3 +3010,451 @@ body::before {
   font-weight: 700;
   color: var(--text);
 }
+
+/* ================================================================
+   OVERHAUL — MINIMALIST INFORMATIVE ART PIECE
+   — Data Bauhaus: broken grid, abstract objects, data-as-art —
+   ================================================================ */
+
+/* ── 1. BACKGROUND — dot grid replaces heavy glow ─────────── */
+body::before {
+  opacity: 0.08;
+  animation: none;
+}
+
+.views {
+  background-image:
+    radial-gradient(circle, rgba(255,255,255,0.06) 1px, transparent 1px);
+  background-size: 32px 32px;
+  background-attachment: local;
+}
+
+/* Abstract geometric crosshair behind main content */
+.views::before {
+  content: '';
+  position: fixed;
+  top: 50%;
+  right: 12%;
+  width: 320px;
+  height: 320px;
+  border-radius: 50%;
+  border: 1px solid rgba(88,101,242,0.05);
+  transform: translateY(-50%);
+  pointer-events: none;
+  z-index: 0;
+}
+.views::after {
+  content: '';
+  position: fixed;
+  top: 30%;
+  right: 8%;
+  width: 180px;
+  height: 180px;
+  border-radius: 50%;
+  border: 1px dashed rgba(87,242,135,0.04);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ── 2. VIEW HEADER — raw, bold, with accent anchor ────────── */
+.vh {
+  position: relative;
+  padding-bottom: 18px;
+  margin-bottom: 30px;
+  border-bottom: 1px solid var(--border);
+  overflow: visible;
+}
+.vh::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  width: 56px;
+  height: 2px;
+  background: var(--accent);
+}
+.vh-title {
+  font-size: 48px;
+  letter-spacing: 5px;
+  background: none !important;
+  -webkit-background-clip: unset !important;
+  -webkit-text-fill-color: var(--text) !important;
+  color: var(--text) !important;
+  text-shadow: none !important;
+}
+
+/* ── 3. CARDS — flat, angular, minimal ────────────────────── */
+.card {
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  border-color: var(--border);
+  transition: border-color 0.2s ease, background 0.2s ease !important;
+}
+.card::after { display: none !important; }
+.card:hover {
+  transform: none !important;
+  box-shadow: none !important;
+  background: var(--bg-3);
+  border-color: var(--border-2) !important;
+}
+
+/* Cards with accent left-bar on hover */
+.sleep-log-card,
+.sleep-nap-card,
+.fc-deck-card {
+  border-left: 2px solid transparent;
+}
+.sleep-log-card:hover,
+.sleep-nap-card:hover { border-left-color: var(--accent) !important; }
+.fc-deck-card:hover { border-left-color: var(--accent) !important; }
+
+/* ── 4. BROKEN GRID — intentional offset ────────────────────
+   Every 3rd card in the dashboard gets a top offset,
+   creating a visually asymmetric, editorial layout. */
+.dash-grid {
+  gap: 14px;
+  align-items: start;
+}
+
+/* Staggered offset — "broken" rhythm */
+.dash-grid > *:nth-child(3n) {
+  position: relative;
+  top: 14px;
+}
+.dash-grid > *:nth-child(3n+2) {
+  position: relative;
+  top: -6px;
+}
+
+/* ── 5. ABSTRACT GEOMETRIC DECORATIONS ──────────────────────
+
+   Thin concentric circles on ring card, decorative diagonal
+   lines on sidebar, large faded numerals as ambient art. */
+
+/* Outer decorative ring on score ring card */
+.ring-card {
+  position: relative;
+  overflow: visible;
+}
+.ring-card::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 200px;
+  height: 200px;
+  border-radius: 50%;
+  border: 1px dashed rgba(255,255,255,0.04);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Abstract diagonal stripe pattern on sidebar */
+.sidebar::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    135deg,
+    transparent,
+    transparent 48px,
+    rgba(255,255,255,0.01) 48px,
+    rgba(255,255,255,0.01) 49px
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+.sidebar > * { position: relative; z-index: 1; }
+
+/* Abstract "data ghost" — large faded text in views */
+.view > .vh .vh-sub::before {
+  content: '//';
+  font-family: var(--f-mono);
+  color: var(--accent);
+  opacity: 0.4;
+  margin-right: 6px;
+  font-size: 13px;
+}
+
+/* Card label — dot separator */
+.card-lbl {
+  letter-spacing: 3px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 10px;
+  margin-bottom: 18px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.card-lbl::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, var(--border), transparent);
+  display: block;
+}
+
+/* ── 6. FLAT BUTTONS ─────────────────────────────────────── */
+.btn-primary {
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  letter-spacing: 2px;
+}
+.btn-primary:hover {
+  transform: none !important;
+  box-shadow: none !important;
+  filter: brightness(1.08);
+}
+.btn-ghost {
+  border-radius: 0 !important;
+}
+.fb {
+  border-radius: 0 !important;
+}
+
+/* ── 7. FLAT FORM INPUTS ─────────────────────────────────── */
+.field-in,
+.field-sel {
+  border-radius: 0 !important;
+  background: rgba(255,255,255,0.02) !important;
+  border-color: var(--border-2) !important;
+}
+.field-in:focus,
+.field-sel:focus {
+  border-color: var(--accent) !important;
+}
+
+/* ── 8. NAV BUTTONS — stripped down ─────────────────────── */
+.nav-btn {
+  border-radius: 0;
+}
+.nav-btn::after { display: none !important; }
+.nav-btn:hover {
+  background: rgba(255,255,255,0.025) !important;
+  transform: translateX(4px) !important;
+}
+.nav-btn.active {
+  background: rgba(88,101,242,0.07) !important;
+}
+
+/* ── 9. MISC FLATTEN ────────────────────────────────────── */
+.countdown-box { border-radius: 0 !important; }
+.sleep-metric { border-radius: 0 !important; }
+.sleep-avg-item { border-radius: 0 !important; }
+.pl-item { border-radius: 0 !important; }
+.tmbl-stats-strip { border-radius: 0 !important; }
+.tmbl-wisdom-item { border-radius: 0 !important; }
+.em-quadrant { border-radius: 0 !important; }
+.fc-deck-card { border-radius: 0 !important; }
+.fc-card-face { border-radius: 0 !important; }
+.spec-topic-card { border-radius: 0 !important; }
+.modal { border-radius: 0 !important; }
+.toast { border-radius: 0 !important; }
+.xp-badge { border-radius: 0 !important; }
+.ti-check, .hc-check { border-radius: 0 !important; }
+.hc-emoji { border-radius: 0 !important; }
+.habit-card { border-radius: 0 !important; }
+.todo-item { border-radius: 0 !important; }
+.tmbl-book-pill { border-radius: 0 !important; }
+.hp { border-radius: 0 !important; }
+.spec-tab { border-radius: 0 !important; }
+.sj-notes, .sj-time-badge { border-radius: 0 !important; }
+.fc-grade { border-radius: 0 !important; }
+.tmbl-block { border-radius: 0 !important; border-left-width: 2px !important; }
+.ql-link, .ql-empty { border-radius: 0 !important; }
+.cal-main { border-radius: 0 !important; }
+.cal-day { border-radius: 0 !important; }
+
+/* ── 10. ABSTRACT ACCENTS ON STAT NUMBERS ──────────────── */
+/* Small abstract mark beside large numbers */
+.stat-n::after {
+  content: '';
+  display: inline-block;
+  width: 4px;
+  height: 4px;
+  background: var(--accent);
+  margin-left: 3px;
+  vertical-align: super;
+  font-size: 8px;
+  border-radius: 50%;
+}
+
+/* Thin separator lines between sleep history entries */
+.sj-entry { padding: 18px 0; }
+.sj-entry::before {
+  content: '';
+  display: block;
+  width: 24px;
+  height: 1px;
+  background: var(--accent);
+  margin-bottom: 10px;
+  opacity: 0.4;
+}
+
+/* ── 11. TOPBAR — very minimal ──────────────────────────── */
+.topbar {
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+}
+
+/* ================================================================
+   SLEEP TIMELINE VISUALIZATION
+   A horizontal arc from 8 PM → 10 AM showing when you slept.
+   ================================================================ */
+
+.sleep-arc-wrap {
+  margin: 12px 0 8px;
+  width: 100%;
+  overflow: visible;
+  position: relative;
+}
+.sleep-arc-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  overflow: visible;
+}
+.sleep-arc-svg text {
+  user-select: none;
+}
+
+/* Total sleep line with nap breakdown */
+.sleep-total-line {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+  padding: 6px 0;
+  border-top: 1px solid var(--border);
+}
+.sleep-total-main {
+  font-family: var(--f-display);
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--accent-3);
+  line-height: 1;
+}
+.sleep-total-nap {
+  font-family: var(--f-mono);
+  font-size: 10px;
+  color: var(--accent-4);
+  letter-spacing: 0.5px;
+}
+.sleep-total-combined {
+  font-family: var(--f-display);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-2);
+}
+.sleep-total-label {
+  font-family: var(--f-mono);
+  font-size: 9px;
+  color: var(--text-4);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+/* Nap total note in averages grid */
+.sleep-avg-nap-note {
+  grid-column: 1 / -1;
+  text-align: center;
+  font-family: var(--f-mono);
+  font-size: 9px;
+  color: var(--accent-4);
+  letter-spacing: 0.5px;
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+  margin-top: 2px;
+}
+
+/* Abstract decorative circle behind sleep log card */
+.sleep-log-card {
+  position: relative;
+  overflow: hidden;
+}
+.sleep-log-card::before {
+  content: '';
+  position: absolute;
+  top: -80px;
+  right: -80px;
+  width: 240px;
+  height: 240px;
+  border-radius: 50%;
+  border: 48px solid rgba(88,101,242,0.03);
+  pointer-events: none;
+  z-index: 0;
+}
+.sleep-log-card > * { position: relative; z-index: 1; }
+
+/* Nap card accent circle */
+.sleep-nap-card {
+  position: relative;
+  overflow: hidden;
+}
+.sleep-nap-card::before {
+  content: '';
+  position: absolute;
+  bottom: -50px;
+  right: -50px;
+  width: 160px;
+  height: 160px;
+  border-radius: 50%;
+  border: 32px solid rgba(254,231,92,0.04);
+  pointer-events: none;
+  z-index: 0;
+}
+.sleep-nap-card > * { position: relative; z-index: 1; }
+
+/* Dashboard sleep preview with timeline */
+.dsp-timeline-wrap {
+  margin: 8px 0;
+  width: 100%;
+}
+.dsp-total-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--border);
+  padding-top: 6px;
+}
+.dsp-total-main {
+  font-family: var(--f-display);
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--accent-3);
+  line-height: 1;
+}
+.dsp-total-nap {
+  font-family: var(--f-mono);
+  font-size: 9px;
+  color: var(--accent-4);
+  letter-spacing: 0.5px;
+}
+.dsp-total-combined {
+  font-family: var(--f-display);
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1;
+}
+.dsp-total-label {
+  font-family: var(--f-mono);
+  font-size: 9px;
+  color: var(--text-4);
+  letter-spacing: 1px;
+}
+
+/* ── RESPONSIVE FLATTEN ──────────────────────────────────── */
+@media (max-width: 960px) {
+  /* Remove broken-grid offsets on mobile */
+  .dash-grid > *:nth-child(3n),
+  .dash-grid > *:nth-child(3n+2) {
+    position: static;
+    top: auto;
+  }
+}
