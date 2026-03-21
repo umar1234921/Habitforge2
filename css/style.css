@@ -2116,6 +2116,29 @@ body::before {
   color: var(--accent-5);
   background: rgba(237,66,69,.1);
 }
+.fc-dm-done-today {
+  font-family: var(--f-mono);
+  font-size: 10px;
+  color: var(--accent-3);
+  background: rgba(87,242,135,.12);
+  padding: 2px 7px;
+  border-radius: 10px;
+}
+.fc-dm-streak {
+  font-family: var(--f-mono);
+  font-size: 10px;
+  color: var(--accent-4);
+  background: rgba(254,231,92,.12);
+  padding: 2px 7px;
+  border-radius: 10px;
+}
+.fc-done-streak {
+  font-family: var(--f-display);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--accent-4);
+  margin: 4px 0 12px;
+}
 .fc-exam-mode-label {
   display: flex;
   align-items: center;
@@ -2870,6 +2893,34 @@ body::before {
   border: 1px solid var(--border);
   border-radius: var(--r);
   padding: 2px 8px;
+}
+
+/* Total sleep (night + nap) row in history */
+.sj-total-sleep {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  background: var(--bg-3);
+  border-radius: var(--r);
+  border: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.sj-tag--total {
+  color: var(--accent);
+  border-color: rgba(88,101,242,.3);
+}
+.sj-total-val {
+  font-family: var(--f-display);
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1;
+}
+.sj-total-detail {
+  font-family: var(--f-mono);
+  font-size: 10px;
+  color: var(--text-3);
+  letter-spacing: .3px;
 }
 
 /* Bed/wake time inputs row in log form */

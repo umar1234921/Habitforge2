@@ -245,6 +245,12 @@ function renderFCDecks() {
             ${due > 0
               ? `<span class="fc-dm-due">${due} due</span>`
               : `<span class="fc-dm-ok">✓ up to date</span>`}
+            ${deck.lastStudiedDate === todayLocalKey()
+              ? `<span class="fc-dm-done-today">✓ Done Today</span>`
+              : ''}
+            ${(deck.streak || 0) > 0
+              ? `<span class="fc-dm-streak">🔥 ${deck.streak}d streak</span>`
+              : ''}
             <span class="fc-dm-target">🎯 ${deck.dailyTarget || 20}/day</span>
             ${daysToExam !== null
               ? `<span class="fc-dm-exam">${deck.examMode ? '📅 ' : ''}${daysToExam}d to exam</span>`
@@ -308,11 +314,13 @@ function saveNewDeck() {
   const deck = {
     id: uid(),
     name,
-    subject:     $('fc-nd-subject').value,
-    examDate:    $('fc-nd-exam').value,
-    dailyTarget: Math.max(1, parseInt($('fc-nd-target').value) || 20),
-    examMode:    $('fc-nd-exam-mode').checked,
-    cards: [],
+    subject:         $('fc-nd-subject').value,
+    examDate:        $('fc-nd-exam').value,
+    dailyTarget:     Math.max(1, parseInt($('fc-nd-target').value) || 20),
+    examMode:        $('fc-nd-exam-mode').checked,
+    cards:           [],
+    streak:          0,
+    lastStudiedDate: null,
   };
   if (!S.flashcardDecks) S.flashcardDecks = [];
   S.flashcardDecks.push(deck);
@@ -579,6 +587,25 @@ function gradeCard(g) {
 }
 
 function showSessionComplete() {
+  // Update streak for the current deck
+  const deck = fcCurrentDeck();
+  if (deck) {
+    const today = todayLocalKey();
+    const yest = new Date();
+    yest.setDate(yest.getDate() - 1);
+    const yesterday = dateToKey(yest);
+    if (deck.lastStudiedDate === today) {
+      // Already counted today — no change
+    } else if (deck.lastStudiedDate === yesterday) {
+      deck.streak = (deck.streak || 0) + 1;
+      deck.lastStudiedDate = today;
+    } else {
+      deck.streak = 1;
+      deck.lastStudiedDate = today;
+    }
+    save();
+  }
+
   $('fc-card-wrap').classList.add('fc-hidden');
   const { again, hard, good, easy } = _fcSessionStats;
   const total = again + hard + good + easy;
@@ -586,10 +613,14 @@ function showSessionComplete() {
   const rate  = total ? Math.round((pass / total) * 100) : 0;
 
   $('fc-session-complete').classList.remove('fc-hidden');
+  const streakHTML = deck && (deck.streak || 0) > 0
+    ? `<div class="fc-done-streak">🔥 ${deck.streak}-day streak${deck.streak > 1 ? '!' : ''}</div>`
+    : '';
   $('fc-session-complete').innerHTML = `
     <div class="fc-done-icon">🎉</div>
     <div class="fc-done-title">Session Complete!</div>
     <div class="fc-done-subtitle">${rate}% retention rate</div>
+    ${streakHTML}
     <div class="fc-done-stats">
       <div class="fc-ds"><span class="fc-ds-n">${total}</span><span class="fc-ds-l">reviewed</span></div>
       <div class="fc-ds fc-again-c"><span class="fc-ds-n">${again}</span><span class="fc-ds-l">again</span></div>
