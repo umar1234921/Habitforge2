@@ -437,6 +437,24 @@ function renderSpecBody() {
   });
 }
 
+function updateTopicProgressBar(mKey) {
+  const [subjKey, topicId] = mKey.split(':');
+  const subj = GCSE_SUBJECTS[subjKey];
+  if (!subj) return;
+  const topic = subj.topics.find(t => t.id === topicId);
+  if (!topic) return;
+  const done = topic.points.filter((p, i) => S.mastered[`${subjKey}:${topicId}:${i}`]).length;
+  const pct = Math.round((done / topic.points.length) * 100);
+  const header = document.querySelector(`.spec-topic-header[data-tid="${topicId}"]`);
+  if (!header) return;
+  const fillEl     = header.querySelector('.sth-mini-fill');
+  const progressEl = header.querySelector('.sth-progress');
+  const pctEl      = header.querySelector('.sth-pct');
+  if (fillEl)     fillEl.style.width = `${pct}%`;
+  if (progressEl) progressEl.textContent = `${done}/${topic.points.length}`;
+  if (pctEl)      pctEl.textContent = `${pct}%`;
+}
+
 function toggleSpecPoint(mKey, el) {
   const wasDone = !!S.mastered[mKey];
   S.mastered[mKey] = !wasDone;
@@ -455,6 +473,7 @@ function toggleSpecPoint(mKey, el) {
     toast('Spec point unmarked', 'info');
   }
   save();
+  updateTopicProgressBar(mKey);
   renderMasteryRing();
   renderSubjBars();
   renderDashStats();
@@ -1357,6 +1376,18 @@ function renderSleepHistory() {
     const sleepTimes = (e.bedtime || e.wakeTime)
       ? `<div class="sj-sleep-times">${e.bedtime ? `<span class="sj-time-badge">🌙 ${e.bedtime}</span>` : ''}${e.wakeTime ? `<span class="sj-time-badge">☀️ ${e.wakeTime}</span>` : ''}</div>`
       : '';
+    // Total sleep = night sleep + any naps that day
+    const dayNaps = (S.napLog || []).filter(n => n.date === e.date);
+    const napMins = dayNaps.reduce((sum, n) => sum + (n.durationMins || 0), 0);
+    const totalHours = parseFloat((e.duration + napMins / 60).toFixed(1));
+    const totalColor = totalHours >= 7 ? 'var(--accent-3)' : totalHours >= 6 ? 'var(--accent-4)' : 'var(--accent-5)';
+    const totalSleepRow = napMins > 0
+      ? `<div class="sj-total-sleep">
+          <span class="sj-tag sj-tag--total">TOTAL</span>
+          <span class="sj-total-val" style="color:${totalColor}">${totalHours}h</span>
+          <span class="sj-total-detail">${e.duration}h night + ${napMins}min nap</span>
+        </div>`
+      : '';
     return `
     <div class="sj-entry">
       <div class="sj-entry-date">${dateStr}</div>
@@ -1382,6 +1413,7 @@ function renderSleepHistory() {
           <span class="sj-label">after</span>
         </div>
       </div>
+      ${totalSleepRow}
       ${e.notes ? `<div class="sj-notes">${e.notes}</div>` : ''}
       <button class="ti-del sj-del" data-sid="${e.id}" title="Delete">✕</button>
     </div>`;

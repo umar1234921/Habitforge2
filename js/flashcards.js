@@ -245,6 +245,12 @@ function renderFCDecks() {
             ${due > 0
               ? `<span class="fc-dm-due">${due} due</span>`
               : `<span class="fc-dm-ok">✓ up to date</span>`}
+            ${deck.lastStudiedDate === todayLocalKey()
+              ? `<span class="fc-dm-done-today">✓ Done Today</span>`
+              : ''}
+            ${(deck.streak || 0) > 0
+              ? `<span class="fc-dm-streak">🔥 ${deck.streak}d streak</span>`
+              : ''}
             <span class="fc-dm-target">🎯 ${deck.dailyTarget || 20}/day</span>
             ${daysToExam !== null
               ? `<span class="fc-dm-exam">${deck.examMode ? '📅 ' : ''}${daysToExam}d to exam</span>`
@@ -308,11 +314,13 @@ function saveNewDeck() {
   const deck = {
     id: uid(),
     name,
-    subject:     $('fc-nd-subject').value,
-    examDate:    $('fc-nd-exam').value,
-    dailyTarget: Math.max(1, parseInt($('fc-nd-target').value) || 20),
-    examMode:    $('fc-nd-exam-mode').checked,
-    cards: [],
+    subject:         $('fc-nd-subject').value,
+    examDate:        $('fc-nd-exam').value,
+    dailyTarget:     Math.max(1, parseInt($('fc-nd-target').value) || 20),
+    examMode:        $('fc-nd-exam-mode').checked,
+    cards:           [],
+    streak:          0,
+    lastStudiedDate: null,
   };
   if (!S.flashcardDecks) S.flashcardDecks = [];
   S.flashcardDecks.push(deck);
@@ -579,6 +587,25 @@ function gradeCard(g) {
 }
 
 function showSessionComplete() {
+  // Update streak for the current deck
+  const deck = fcCurrentDeck();
+  if (deck) {
+    const today = todayLocalKey();
+    const yest = new Date();
+    yest.setDate(yest.getDate() - 1);
+    const yesterday = dateToKey(yest);
+    if (deck.lastStudiedDate === today) {
+      // Already counted today — no change
+    } else if (deck.lastStudiedDate === yesterday) {
+      deck.streak = (deck.streak || 0) + 1;
+      deck.lastStudiedDate = today;
+    } else {
+      deck.streak = 1;
+      deck.lastStudiedDate = today;
+    }
+    save();
+  }
+
   $('fc-card-wrap').classList.add('fc-hidden');
   const { again, hard, good, easy } = _fcSessionStats;
   const total = again + hard + good + easy;
@@ -586,10 +613,14 @@ function showSessionComplete() {
   const rate  = total ? Math.round((pass / total) * 100) : 0;
 
   $('fc-session-complete').classList.remove('fc-hidden');
+  const streakHTML = deck && (deck.streak || 0) > 0
+    ? `<div class="fc-done-streak">🔥 ${deck.streak}-day streak${deck.streak > 1 ? '!' : ''}</div>`
+    : '';
   $('fc-session-complete').innerHTML = `
     <div class="fc-done-icon">🎉</div>
     <div class="fc-done-title">Session Complete!</div>
     <div class="fc-done-subtitle">${rate}% retention rate</div>
+    ${streakHTML}
     <div class="fc-done-stats">
       <div class="fc-ds"><span class="fc-ds-n">${total}</span><span class="fc-ds-l">reviewed</span></div>
       <div class="fc-ds fc-again-c"><span class="fc-ds-n">${again}</span><span class="fc-ds-l">again</span></div>
@@ -658,6 +689,168 @@ function escFc(str) {
     .replace(/"/g, '&quot;');
 }
 
+// ─── ANKI .APKG IMPORT ─────────────────────────────────────
+
+/**
+ * Strips Anki HTML markup and decodes HTML entities from a field string.
+ * Uses the browser's DOM parser instead of regex to handle all edge cases
+ * correctly (avoids incomplete sanitization and double-escaping issues).
+ */
+function stripAnkiHtml(str) {
+  // Pre-process tags that should become newlines, since textContent ignores them
+  const withNewlines = String(str)
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/div>/gi, '\n')
+    .replace(/<\/p>/gi, '\n');
+  // Let the browser's HTML parser strip all remaining tags and decode entities
+  const div = document.createElement('div');
+  div.innerHTML = withNewlines;
+  return (div.textContent || '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+/**
+ * Dynamically injects an external script tag once, returning a Promise that
+ * resolves when the script has loaded.
+ * @param {string} src       Script URL
+ * @param {string} [integrity] Optional SRI hash for Subresource Integrity check
+ */
+function loadScript(src, integrity) {
+  return new Promise((resolve, reject) => {
+    // Use strict src equality (not CSS selector) to avoid injection issues
+    if (Array.from(document.scripts).some(s => s.src === src)) { resolve(); return; }
+    const s = document.createElement('script');
+    s.src  = src;
+    if (integrity) {
+      s.integrity   = integrity;
+      s.crossOrigin = 'anonymous';
+    }
+    s.onload  = resolve;
+    s.onerror = () => reject(new Error(`Failed to load: ${src}`));
+    document.head.appendChild(s);
+  });
+}
+
+/**
+ * Imports an Anki .apkg file and creates a new flashcard deck from its notes.
+ *
+ * An .apkg is a ZIP archive containing:
+ *   - collection.anki21 or collection.anki2 — a SQLite database
+ *   - (optional) media files
+ *
+ * The SQLite `notes` table stores card fields joined by the ASCII Unit Separator
+ * character (\x1f).  The first field is treated as the question (front) and the
+ * second field as the answer (back), matching Anki's Basic note type.
+ *
+ * Libraries loaded lazily from CDN:
+ *   - JSZip  3.10.1  (zip extraction, pure JS)
+ *   - sql.js 1.10.2  (WebAssembly SQLite reader)
+ */
+async function importApkg(file) {
+  if (!file) return;
+
+  const JSZIP_CDN   = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+  const JSZIP_SRI   = 'sha384-+mbV2IY1Zk/X1p/nWllGySJSUN8uMs+gUAN10Or95UBH0fpj6GfKgPmgC5EXieXG';
+  const SQLJS_CDN   = 'https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.2/sql-wasm.js';
+  const SQLJS_SRI   = 'sha384-/2HxK3kObxd3+ww+DG94zYpLU1yodAI1+vAauuriYyEXkQ+zBvXYvJPL9Ey87/lN';
+  const SQLJS_BASE  = 'https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.2/';
+
+  toast('Importing .apkg — loading libraries…', 'info');
+
+  try {
+    // ── Step 1: Read the file as a raw byte array ──────────────────────────
+    const arrayBuffer = await file.arrayBuffer();
+
+    // ── Step 2: Load JSZip and unzip the .apkg ─────────────────────────────
+    await loadScript(JSZIP_CDN, JSZIP_SRI);
+    // JSZip is now available as the global `JSZip`
+    const zip = await JSZip.loadAsync(arrayBuffer);
+
+    // .apkg may use either the newer .anki21 or the legacy .anki2 filename
+    const dbEntry = zip.file('collection.anki21') || zip.file('collection.anki2');
+    if (!dbEntry) {
+      toast('Invalid .apkg — no Anki collection found inside', 'err');
+      return;
+    }
+
+    const dbBytes = await dbEntry.async('uint8array');
+    toast('Importing .apkg — reading cards…', 'info');
+
+    // ── Step 3: Load sql.js (WebAssembly SQLite) ───────────────────────────
+    await loadScript(SQLJS_CDN, SQLJS_SRI);
+    // initSqlJs is set on window by sql-wasm.js when loaded as a plain script
+    const SQL = await window.initSqlJs({
+      locateFile: f => SQLJS_BASE + f,
+    });
+
+    // ── Step 4: Open the SQLite database ──────────────────────────────────
+    const db = new SQL.Database(dbBytes);
+
+    // ── Step 5: Determine deck name (fall back to filename) ────────────────
+    let deckName = file.name.replace(/\.apkg$/i, '');
+    try {
+      const colRes = db.exec('SELECT decks FROM col LIMIT 1');
+      if (colRes.length && colRes[0].values.length) {
+        const decksJson = JSON.parse(colRes[0].values[0][0]);
+        // Pick the first non-Default deck
+        const deckEntry = Object.values(decksJson).find(
+          d => d.name && d.name !== 'Default'
+        );
+        if (deckEntry) deckName = deckEntry.name;
+      }
+    } catch (err) { console.warn('[apkg deck name]', err); }
+
+    // ── Step 6: Read notes ─────────────────────────────────────────────────
+    // Fields are separated by the ASCII Unit Separator character (0x1f)
+    const notesRes = db.exec('SELECT flds FROM notes');
+    db.close();
+
+    if (!notesRes.length || !notesRes[0].values.length) {
+      toast('No cards found inside the .apkg file', 'err');
+      return;
+    }
+
+    // ── Step 7: Parse each note into a front/back card ────────────────────
+    const FIELD_SEP = '\x1f';
+    const cards = [];
+    notesRes[0].values.forEach(row => {
+      const fields = String(row[0]).split(FIELD_SEP);
+      if (fields.length >= 2) {
+        const front = stripAnkiHtml(fields[0]);
+        const back  = stripAnkiHtml(fields[1]);
+        if (front && back) cards.push(makeFlashcard(front, back));
+      }
+    });
+
+    if (!cards.length) {
+      toast('No valid Q&A pairs found in the .apkg file', 'err');
+      return;
+    }
+
+    // ── Step 8: Create the deck and save ──────────────────────────────────
+    if (!S.flashcardDecks) S.flashcardDecks = [];
+    S.flashcardDecks.push({
+      id:              uid(),
+      name:            deckName,
+      subject:         '',
+      examDate:        '',
+      dailyTarget:     20,
+      examMode:        false,
+      cards,
+      streak:          0,
+      lastStudiedDate: null,
+    });
+    save();
+    renderFCDecks();
+    toast(`✓ Imported "${deckName}" — ${cards.length} card${cards.length !== 1 ? 's' : ''}`);
+
+  } catch (err) {
+    console.error('[apkg import]', err);
+    toast('Import failed — see browser console for details', 'err');
+  }
+}
+
 // ─── INIT ─────────────────────────────────────────────────
 function initFlashcards() {
   if (!S.flashcardDecks) S.flashcardDecks = [];
@@ -671,6 +864,14 @@ function initFlashcards() {
     if (e.target === $('fc-new-deck-modal')) closeNewDeckModal();
   });
   $('fc-nd-name').addEventListener('keydown', e => { if (e.key === 'Enter') saveNewDeck(); });
+
+  // .apkg import
+  $('fc-import-apkg-btn').addEventListener('click', () => $('fc-apkg-input').click());
+  $('fc-apkg-input').addEventListener('change', e => {
+    const file = e.target.files[0];
+    if (file) importApkg(file);
+    e.target.value = ''; // reset so the same file can be re-imported if needed
+  });
 
   // Subject filter
   const filterEl = $('fc-subject-filter');
