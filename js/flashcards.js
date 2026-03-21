@@ -701,7 +701,8 @@ function stripAnkiHtml(str) {
   const withNewlines = String(str)
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/div>/gi, '\n')
-    .replace(/<\/p>/gi, '\n');
+    .replace(/<\/p>/gi, '\n')
+    .replace(/<img[^>]*>/gi, '[image]');  // preserve image references as text
   // Let the browser's HTML parser strip all remaining tags and decode entities
   const div = document.createElement('div');
   div.innerHTML = withNewlines;
@@ -767,10 +768,21 @@ async function importApkg(file) {
     // JSZip is now available as the global `JSZip`
     const zip = await JSZip.loadAsync(arrayBuffer);
 
-    // .apkg may use either the newer .anki21 or the legacy .anki2 filename
+    // .apkg may use either the newer .anki21 or the legacy .anki2 filename.
+    // Anki 23.10+ can also produce .anki21b (zstd-compressed) — we can't
+    // read that format yet so we surface a clear message instead.
     const dbEntry = zip.file('collection.anki21') || zip.file('collection.anki2');
     if (!dbEntry) {
-      toast('Invalid .apkg — no Anki collection found inside', 'err');
+      if (zip.file('collection.anki21b')) {
+        toast(
+          'This .apkg uses a newer Anki format (anki21b) that is not yet supported. ' +
+          'Re-export the deck from Anki using File → Export → "Anki Deck Package (.apkg)" ' +
+          'and make sure "Legacy support" is enabled.',
+          'err'
+        );
+      } else {
+        toast('Invalid .apkg — no Anki collection found inside', 'err');
+      }
       return;
     }
 
@@ -812,15 +824,27 @@ async function importApkg(file) {
     }
 
     // ── Step 7: Parse each note into a front/back card ────────────────────
+    // Fields are separated by \x1f; the first field is always the front.
+    // The back (second field) may be empty for cloze notes or one-sided
+    // card types — those are still imported so the user can review them.
+    // sql.js may return BLOB columns as Uint8Array; decode to string first.
     const FIELD_SEP = '\x1f';
     const cards = [];
     notesRes[0].values.forEach(row => {
-      const fields = String(row[0]).split(FIELD_SEP);
-      if (fields.length >= 2) {
-        const front = stripAnkiHtml(fields[0]);
-        const back  = stripAnkiHtml(fields[1]);
-        if (front && back) cards.push(makeFlashcard(front, back));
+      let rawFlds = row[0];
+      if (rawFlds == null) return;
+      if (rawFlds instanceof Uint8Array) {
+        try {
+          rawFlds = new TextDecoder('utf-8', { fatal: true }).decode(rawFlds);
+        } catch {
+          console.warn('[apkg] flds contained invalid UTF-8; falling back to lossy decode');
+          rawFlds = new TextDecoder('utf-8', { fatal: false }).decode(rawFlds);
+        }
       }
+      const fields = String(rawFlds).split(FIELD_SEP);
+      const front  = stripAnkiHtml(fields[0] || '');
+      const back   = stripAnkiHtml(fields[1] || '');
+      if (front) cards.push(makeFlashcard(front, back));
     });
 
     if (!cards.length) {
