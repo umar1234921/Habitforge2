@@ -173,11 +173,12 @@ const SRS = {
 };
 
 // ─── UI STATE ─────────────────────────────────────────────
-let _fcCurrentDeckId = null;
-let _fcStudyQueue    = [];
-let _fcStudyIdx      = 0;
-let _fcFlipped       = false;
-let _fcSessionStats  = { again: 0, hard: 0, good: 0, easy: 0 };
+let _fcCurrentDeckId      = null;
+let _fcStudyQueue         = [];
+let _fcStudyIdx           = 0;
+let _fcFlipped            = false;
+let _fcSessionStats       = { again: 0, hard: 0, good: 0, easy: 0 };
+let _fcSessionAgainCounts = {}; // tracks per-card re-queue count this session
 
 function fcCurrentDeck() {
   return (S.flashcardDecks || []).find(d => d.id === _fcCurrentDeckId) || null;
@@ -487,9 +488,10 @@ function startStudySession(deckId) {
   _fcStudyQueue   = deck.examMode && deck.examDate
     ? [...due]                              // preserve priority order for exam mode
     : [...due].sort(() => Math.random() - 0.5);
-  _fcStudyIdx     = 0;
-  _fcFlipped      = false;
-  _fcSessionStats = { again: 0, hard: 0, good: 0, easy: 0 };
+  _fcStudyIdx           = 0;
+  _fcFlipped            = false;
+  _fcSessionStats       = { again: 0, hard: 0, good: 0, easy: 0 };
+  _fcSessionAgainCounts = {};
 
   $('fc-study-deck-name').textContent = deck.name;
   $('fc-session-complete').classList.add('fc-hidden');
@@ -575,10 +577,15 @@ function gradeCard(g) {
   // XP: Again=0, Hard=1, Good=2, Easy=3
   if (g > 0) addXP(g);
 
-  // On "Again", re-insert the card near the end of the queue (cap to avoid runaway)
-  if (g === 0 && _fcStudyQueue.length < 80) {
-    const insertAt = Math.min(_fcStudyIdx + 3, _fcStudyQueue.length);
-    _fcStudyQueue.splice(insertAt, 0, { ...updated });
+  // On "Again", re-insert the card near the end of the queue.
+  // Cap per-card re-queues (not total queue length) to avoid runaway.
+  if (g === 0) {
+    const timesRequeued = _fcSessionAgainCounts[card.id] || 0;
+    if (timesRequeued < 5) {
+      const insertAt = Math.min(_fcStudyIdx + 3, _fcStudyQueue.length);
+      _fcStudyQueue.splice(insertAt, 0, { ...updated });
+      _fcSessionAgainCounts[card.id] = timesRequeued + 1;
+    }
   }
 
   save();
