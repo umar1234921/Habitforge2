@@ -5,10 +5,12 @@
 // ─── STATE ────────────────────────────────────────────────
 const S = {
   mastered: {},        // { "subjectKey:topicId:pointIdx": true }
+  specAmber: {},       // { "subjectKey:topicId:pointIdx": true } — amber/learning state
   habits: [],
   todos: [],
   calEvents: {},
   pomoLog: [],
+  focusLog: [],        // [ { task, time, date, dur } ] — free-focus stopwatch sessions
   habits_done: {},     // { habitId: true } — resets daily
   habitHistory: {},    // { habitId: { 'YYYY-MM-DD': true } }
   xp: 0,
@@ -43,6 +45,9 @@ function load() {
     const raw = localStorage.getItem('hf_gcse');
     if (raw) Object.assign(S, JSON.parse(raw));
   } catch(e) {}
+  // Safety: ensure new fields exist even when loading old saved data
+  if (!S.specAmber || typeof S.specAmber !== 'object') S.specAmber = {};
+  if (!Array.isArray(S.focusLog)) S.focusLog = [];
 }
 function fmt(sec) {
   return `${String(Math.floor(sec/60)).padStart(2,'0')}:${String(sec%60).padStart(2,'0')}`;
@@ -307,6 +312,14 @@ function renderSubjBars() {
     </div>`; }).join('');
 }
 
+function getTodayFocusMins() {
+  const today = todayKey();
+  let mins = 0;
+  (S.pomoLog || []).forEach(l => { if (l.date === today) mins += (l.dur || 0); });
+  (S.focusLog || []).forEach(l => { if (l.date === today) mins += (l.dur || 0); });
+  return mins;
+}
+
 function renderDashStats() {
   const habitsDone = S.habits.filter(h => S.habits_done[h.id]).length;
   $('st-habits').textContent = habitsDone;
@@ -314,6 +327,10 @@ function renderDashStats() {
   let specDone = 0;
   Object.keys(S.mastered).forEach(k => { if (S.mastered[k]) specDone++; });
   $('st-spec').textContent = specDone;
+
+  // Today focus time
+  const focusEl = $('st-focus');
+  if (focusEl) focusEl.textContent = getTodayFocusMins() + 'm';
 
   // Today score for topbar
   const totalHabits = S.habits.length;
@@ -406,12 +423,19 @@ function renderSpecBody() {
       <div class="spec-points-list" style="display:${isOpen ? 'block' : 'none'}">
         ${t.points.map((p, i) => {
           const mKey = `${currentSpecSubj}:${t.id}:${i}`;
-          const done = !!S.mastered[mKey];
+          const isGreen = !!S.mastered[mKey];
+          const isAmber = !isGreen && !!S.specAmber[mKey];
+          const statusClass = isGreen ? 'mastered' : isAmber ? 'amber' : 'red-status';
+          const xpText = isGreen ? 'DONE' : isAmber ? 'REVIEW' : '+2xp';
           return `
-          <div class="spec-point ${done ? 'mastered' : ''}" data-mkey="${mKey}">
-            <div class="sp-check">${done ? '✓' : ''}</div>
+          <div class="spec-point ${statusClass}" data-mkey="${mKey}">
+            <div class="sp-tl">
+              <div class="sp-tl-dot sp-tl-red"></div>
+              <div class="sp-tl-dot sp-tl-amber"></div>
+              <div class="sp-tl-dot sp-tl-green"></div>
+            </div>
             <div class="sp-text">${p}</div>
-            <div class="sp-xp">${done ? 'DONE' : '+2xp'}</div>
+            <div class="sp-xp">${xpText}</div>
           </div>`;
         }).join('')}
       </div>
@@ -456,21 +480,34 @@ function updateTopicProgressBar(mKey) {
 }
 
 function toggleSpecPoint(mKey, el) {
-  const wasDone = !!S.mastered[mKey];
-  S.mastered[mKey] = !wasDone;
-  if (!wasDone) {
+  const isGreen = !!S.mastered[mKey];
+  const isAmber = !isGreen && !!S.specAmber[mKey];
+
+  if (!isAmber && !isGreen) {
+    // Red → Amber
+    S.specAmber[mKey] = true;
+    el.classList.remove('mastered', 'red-status');
+    el.classList.add('amber');
+    el.querySelector('.sp-xp').textContent = 'REVIEW';
+    toast('🟡 Marked for review', 'info');
+  } else if (isAmber) {
+    // Amber → Green (mastered)
+    delete S.specAmber[mKey];
+    S.mastered[mKey] = true;
     addXP(2);
-    toast('✓ Spec point mastered! +2 XP');
+    el.classList.remove('amber', 'red-status');
     el.classList.add('mastered');
-    el.querySelector('.sp-check').textContent = '✓';
     el.querySelector('.sp-xp').textContent = 'DONE';
+    toast('✓ Spec point mastered! +2 XP');
   } else {
+    // Green → Red
+    delete S.mastered[mKey];
     S.xp = Math.max(0, S.xp - 2);
     updateXPDisplay();
-    el.classList.remove('mastered');
-    el.querySelector('.sp-check').textContent = '';
+    el.classList.remove('mastered', 'amber');
+    el.classList.add('red-status');
     el.querySelector('.sp-xp').textContent = '+2xp';
-    toast('Spec point unmarked', 'info');
+    toast('🔴 Needs more work', 'info');
   }
   save();
   updateTopicProgressBar(mKey);
@@ -557,7 +594,7 @@ function completePomo(skipped=false) {
     const subjName = subj ? GCSE_SUBJECTS[subj]?.name : '';
     const task = $('pomo-task-in').value || (subjName ? `${subjName} revision` : 'Deep work session');
     const now = new Date();
-    S.pomoLog.unshift({ task, time: now.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}), dur: S.pomoSettings.work });
+    S.pomoLog.unshift({ task, time: now.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}), date: todayKey(), dur: S.pomoSettings.work });
     if (S.pomoLog.length>15) S.pomoLog.pop();
     save(); renderPomoLog(); updateDWStats(); renderDashStats();
     toast(`🔥 Session complete! +20 XP`);
@@ -613,7 +650,91 @@ function updateDWStats() {
   $('dwt-sess').textContent = S.pomoSessions;
 }
 
-// ─── CALENDAR ────────────────────────────────────────────
+// ─── FREE FOCUS STOPWATCH ─────────────────────────────────
+let focusSec = 0, focusRunning = false, focusTimer = null;
+
+function fmtHMS(sec) {
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  if (h > 0) return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+}
+
+function initFreeFocus() {
+  $('ff-start').addEventListener('click', toggleFreeFocus);
+  $('ff-log').addEventListener('click', logFreeFocus);
+  $('ff-reset').addEventListener('click', resetFreeFocus);
+  updateFreeFocusDisplay();
+}
+
+function toggleFreeFocus() {
+  if (focusRunning) {
+    clearInterval(focusTimer); focusRunning = false;
+    $('ff-start').textContent = '▶ Resume';
+    $('ff-status').textContent = 'Paused — log or resume';
+    $('ff-log').disabled = false;
+  } else {
+    focusRunning = true;
+    $('ff-start').textContent = '⏸ Pause';
+    $('ff-status').textContent = '🔥 Focus active — stay off your phone!';
+    $('ff-log').disabled = true;
+    focusTimer = setInterval(tickFreeFocus, 1000);
+  }
+}
+
+function tickFreeFocus() {
+  focusSec++;
+  updateFreeFocusDisplay();
+}
+
+function logFreeFocus() {
+  if (focusSec < 60) { toast('Focus for at least 1 minute before logging', 'info'); return; }
+  clearInterval(focusTimer); focusRunning = false;
+  const mins = Math.round(focusSec / 60);
+  S.pomoSessions++;
+  S.deepWorkMins += mins;
+  const now = new Date();
+  const task = $('ff-task-in').value || 'Free focus session';
+  if (!Array.isArray(S.focusLog)) S.focusLog = [];
+  S.focusLog.unshift({ task, time: now.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}), date: todayKey(), dur: mins });
+  if (S.focusLog.length > 15) S.focusLog.pop();
+  addXP(Math.max(1, Math.floor(mins / 5)));
+  save(); renderFocusLog(); updateDWStats(); renderDashStats();
+  toast(`🌲 ${mins}m logged! +${Math.max(1, Math.floor(mins/5))} XP`);
+  focusSec = 0;
+  $('ff-start').textContent = '▶ Start';
+  $('ff-log').disabled = true;
+  $('ff-status').textContent = 'Session logged ✓';
+  updateFreeFocusDisplay();
+}
+
+function resetFreeFocus() {
+  clearInterval(focusTimer); focusRunning = false; focusSec = 0;
+  $('ff-start').textContent = '▶ Start';
+  $('ff-log').disabled = true;
+  $('ff-status').textContent = 'Ready to focus';
+  updateFreeFocusDisplay();
+}
+
+function updateFreeFocusDisplay() {
+  $('ff-time').textContent = fmtHMS(focusSec);
+}
+
+function renderFocusLog() {
+  const el = $('ff-log-list');
+  if (!el) return;
+  const log = S.focusLog || [];
+  if (!log.length) { el.innerHTML = '<p class="empty-s">No free focus sessions yet.</p>'; return; }
+  el.innerHTML = log.slice(0, 5).map(l => `
+    <div class="pl-item">
+      <span class="pl-time">${l.time}</span>
+      <span class="pl-task">${l.task}</span>
+      <span class="pl-dur">${l.dur}m</span>
+    </div>`).join('');
+}
+
+
 let calDate = new Date();
 let calSelected = null;
 
@@ -1563,6 +1684,7 @@ function init() {
   initNav();
   initTopbar();
   initPomodoro();
+  initFreeFocus();
   initCalendar();
   initTodos();
   initHabits();

@@ -541,6 +541,7 @@ body::before {
   grid-template-columns: repeat(12, 1fr);
   gap: 14px;
 }
+.span-3  { grid-column: span 3; }
 .span-4  { grid-column: span 4; }
 .span-5  { grid-column: span 5; }
 .span-6  { grid-column: span 6; }
@@ -723,31 +724,99 @@ body::before {
   border-bottom: 1px solid var(--border);
   cursor: pointer;
   transition: background .12s;
+  user-select: none;
 }
 .spec-point:last-child { border-bottom: none; }
 .spec-point:hover { background: var(--bg-3); }
-.spec-point.mastered { background: rgba(87,242,135,.04); }
-.sp-check {
-  width: 20px; height: 20px;
-  border: 1.5px solid var(--border-2);
-  border-radius: 4px;
+
+/* Traffic light indicator */
+.sp-tl {
   display: flex;
-  align-items: center;
-  justify-content: center;
+  flex-direction: column;
+  gap: 3px;
   flex-shrink: 0;
-  font-size: 11px;
-  transition: all .15s;
-  color: transparent;
 }
-.spec-point.mastered .sp-check {
-  background: var(--accent-3);
-  border-color: var(--accent-3);
-  color: #000;
+.sp-tl-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  opacity: 0.2;
+  transition: opacity .2s, transform .2s;
 }
-.sp-text { font-size: 13.5px; color: var(--text-2); line-height: 1.4; flex: 1; }
+.sp-tl-red   { background: #ed4245; }
+.sp-tl-amber { background: #fee75c; }
+.sp-tl-green { background: #57f287; }
+
+/* Red state — red dot lit */
+.spec-point.red-status { background: rgba(237,66,69,.04); }
+.spec-point.red-status .sp-tl-red { opacity: 1; transform: scale(1.15); }
+
+/* Amber state — amber dot lit */
+.spec-point.amber { background: rgba(254,231,92,.04); }
+.spec-point.amber .sp-tl-amber { opacity: 1; transform: scale(1.15); }
+
+/* Green state — green dot lit */
+.spec-point.mastered { background: rgba(87,242,135,.05); }
+.spec-point.mastered .sp-tl-green { opacity: 1; transform: scale(1.15); }
 .spec-point.mastered .sp-text { color: var(--text-3); text-decoration: line-through; }
+
+.sp-text { font-size: 13.5px; color: var(--text-2); line-height: 1.4; flex: 1; }
 .sp-xp { font-family: var(--f-mono); font-size: 9px; color: var(--accent-4); letter-spacing: 1px; }
+.spec-point.amber .sp-xp { color: #fee75c; }
 .spec-point.mastered .sp-xp { color: var(--text-4); }
+
+/* ================================================================
+   FREE FOCUS STOPWATCH
+   ================================================================ */
+.ff-wrap { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; }
+.ff-time {
+  font-family: var(--f-display);
+  font-size: 48px;
+  font-weight: 800;
+  color: var(--accent-3);
+  letter-spacing: 3px;
+  line-height: 1;
+  text-align: center;
+}
+.ff-status {
+  font-family: var(--f-mono);
+  font-size: 10px;
+  letter-spacing: 1px;
+  color: var(--text-3);
+  text-align: center;
+}
+.ff-task-in {
+  margin: 0;
+}
+.ff-ctrl {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}
+.ff-btn {
+  padding: 8px 14px;
+  border-radius: var(--r);
+  border: 1px solid var(--border);
+  background: var(--bg-3);
+  color: var(--text-2);
+  font-family: var(--f-mono);
+  font-size: 10px;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: all .15s;
+}
+.ff-btn:hover:not(:disabled) { border-color: var(--border-2); color: var(--text); }
+.ff-btn:disabled { opacity: 0.35; cursor: default; }
+.ff-btn-start { background: var(--accent); border-color: var(--accent); color: #fff; flex: 1; }
+.ff-btn-start:hover:not(:disabled) { filter: brightness(1.15); }
+.ff-btn-log { background: var(--accent-3); border-color: var(--accent-3); color: #000; }
+.ff-btn-log:hover:not(:disabled) { filter: brightness(1.1); }
+.ff-hint {
+  font-family: var(--f-mono);
+  font-size: 9px;
+  color: var(--text-4);
+  text-align: center;
+  line-height: 1.5;
+}
 
 /* ================================================================
    POMODORO
@@ -1564,7 +1633,7 @@ body::before {
   .main { margin-left: 0; }
   .hamburger { display: block; }
   .dash-grid { grid-template-columns: 1fr; }
-  .span-4,.span-5,.span-6,.span-7,.span-12 { grid-column: span 1; }
+  .span-3,.span-4,.span-5,.span-6,.span-7,.span-12 { grid-column: span 1; }
   .pomo-layout { grid-template-columns: 1fr; }
   .cal-layout { grid-template-columns: 1fr; }
   .todo-layout { grid-template-columns: 1fr; }
