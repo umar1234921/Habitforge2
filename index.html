@@ -187,15 +187,19 @@
           </div>
 
           <!-- Stats strip -->
-          <div class="card span-4 stat-card">
+          <div class="card span-3 stat-card">
             <span class="stat-n" id="st-habits">0</span>
             <span class="stat-l">Habits Done</span>
           </div>
-          <div class="card span-4 stat-card">
+          <div class="card span-3 stat-card">
             <span class="stat-n" id="st-pomo">0</span>
-            <span class="stat-l">Pomodoros</span>
+            <span class="stat-l">Focus Sessions</span>
           </div>
-          <div class="card span-4 stat-card">
+          <div class="card span-3 stat-card">
+            <span class="stat-n" id="st-focus">0m</span>
+            <span class="stat-l">Focused Today</span>
+          </div>
+          <div class="card span-3 stat-card">
             <span class="stat-n" id="st-spec">0</span>
             <span class="stat-l">Spec Points</span>
           </div>
@@ -224,7 +228,7 @@
       <section class="view" id="view-specs">
         <div class="vh">
           <h1 class="vh-title">GCSE SPECS</h1>
-          <p class="vh-sub">Tick each spec point as you master it. Every tick = +2 XP.</p>
+          <p class="vh-sub">Click each point to cycle: 🔴 Needs work → 🟡 Learning → 🟢 Mastered (+2 XP). Green = ready for the exam.</p>
         </div>
 
         <!-- Subject selector -->
@@ -274,6 +278,21 @@
           </div>
 
           <div class="pomo-side">
+            <div class="card">
+              <div class="card-lbl">FREE FOCUS STOPWATCH <span class="card-lbl-sub">— forest mode</span></div>
+              <div class="ff-wrap">
+                <div class="ff-time" id="ff-time">00:00</div>
+                <div class="ff-status" id="ff-status">Ready to focus</div>
+                <input class="field-in ff-task-in" id="ff-task-in" placeholder="What are you working on?"/>
+                <div class="ff-ctrl">
+                  <button class="ff-btn ff-btn-start" id="ff-start">▶ Start</button>
+                  <button class="ff-btn ff-btn-log" id="ff-log" disabled>✓ Log</button>
+                  <button class="ff-btn ff-btn-reset" id="ff-reset">↺</button>
+                </div>
+                <div class="ff-hint">Start when you begin — stop when you take a break. Log to save.</div>
+              </div>
+              <div id="ff-log-list"></div>
+            </div>
             <div class="card">
               <div class="card-lbl">DEEP WORK PROTOCOL</div>
               <ul class="protocol-list">
