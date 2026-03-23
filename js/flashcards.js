@@ -19,7 +19,7 @@ function todayLocalKey() {
 }
 
 // Duration of the card flip CSS transition (must match .fc-card-inner transition in style.css)
-const FC_FLIP_DURATION_MS = 450;
+const FC_FLIP_DURATION_MS = 300;
 
 
 const SRS = {
@@ -182,6 +182,43 @@ let _fcSessionAgainCounts = {}; // tracks per-card re-queue count this session
 
 function fcCurrentDeck() {
   return (S.flashcardDecks || []).find(d => d.id === _fcCurrentDeckId) || null;
+}
+
+// ─── SESSION PROGRESS PERSISTENCE ────────────────────────
+const FC_SESSION_KEY = 'hf_fc_sess';
+
+function fcSaveSessionProgress() {
+  try {
+    const sess = {
+      deckId:      _fcCurrentDeckId,
+      date:        todayLocalKey(),
+      queueIds:    _fcStudyQueue.map(c => c.id),
+      idx:         _fcStudyIdx,
+      stats:       { ..._fcSessionStats },
+      againCounts: { ..._fcSessionAgainCounts },
+    };
+    localStorage.setItem(FC_SESSION_KEY, JSON.stringify(sess));
+  } catch(e) {}
+}
+
+function fcLoadSavedSession(deckId) {
+  try {
+    const raw = localStorage.getItem(FC_SESSION_KEY);
+    if (!raw) return null;
+    const sess = JSON.parse(raw);
+    if (
+      sess.deckId === deckId &&
+      sess.date === todayLocalKey() &&
+      sess.idx > 0 &&
+      Array.isArray(sess.queueIds) &&
+      sess.idx < sess.queueIds.length
+    ) return sess;
+  } catch(e) {}
+  return null;
+}
+
+function fcClearSavedSession() {
+  try { localStorage.removeItem(FC_SESSION_KEY); } catch(e) {}
 }
 
 // ─── PANEL NAVIGATION ─────────────────────────────────────
@@ -477,6 +514,17 @@ function makeFlashcard(front, back) {
 }
 
 // ─── STUDY SESSION ────────────────────────────────────────
+function _fcStartFresh(deck, due) {
+  _fcStudyQueue   = deck.examMode && deck.examDate
+    ? [...due]                              // preserve priority order for exam mode
+    : [...due].sort(() => Math.random() - 0.5);
+  _fcStudyIdx           = 0;
+  _fcFlipped            = false;
+  _fcSessionStats       = { again: 0, hard: 0, good: 0, easy: 0 };
+  _fcSessionAgainCounts = {};
+  fcClearSavedSession();
+}
+
 function startStudySession(deckId) {
   _fcCurrentDeckId = deckId;
   const deck = fcCurrentDeck();
@@ -485,16 +533,54 @@ function startStudySession(deckId) {
   const due = SRS.dueToday(deck);
   if (!due.length) { toast('No cards due — well done!'); return; }
 
-  _fcStudyQueue   = deck.examMode && deck.examDate
-    ? [...due]                              // preserve priority order for exam mode
-    : [...due].sort(() => Math.random() - 0.5);
-  _fcStudyIdx           = 0;
-  _fcFlipped            = false;
-  _fcSessionStats       = { again: 0, hard: 0, good: 0, easy: 0 };
-  _fcSessionAgainCounts = {};
+  // Check for saved mid-session progress
+  const savedSess = fcLoadSavedSession(deckId);
+  if (savedSess) {
+    const cardMap = Object.fromEntries(deck.cards.map(c => [c.id, c]));
+    const rebuiltQueue = savedSess.queueIds.map(id => cardMap[id]).filter(Boolean);
+    const remaining = rebuiltQueue.length - savedSess.idx;
+    if (remaining > 0) {
+      $('fc-study-deck-name').textContent = deck.name;
+      $('fc-card-wrap').classList.add('fc-hidden');
+      $('fc-session-complete').classList.add('fc-hidden');
+      $('fc-resume-sub').textContent =
+        `You reviewed ${savedSess.idx} of ${rebuiltQueue.length} card${rebuiltQueue.length !== 1 ? 's' : ''} — ${remaining} left to go.`;
+      $('fc-resume-prompt').classList.remove('fc-hidden');
+      fcShowPanel('study');
 
+      const onResume = () => {
+        cleanup();
+        _fcStudyQueue         = rebuiltQueue;
+        _fcStudyIdx           = savedSess.idx;
+        _fcFlipped            = false;
+        _fcSessionStats       = { ...savedSess.stats };
+        _fcSessionAgainCounts = { ...savedSess.againCounts };
+        $('fc-resume-prompt').classList.add('fc-hidden');
+        $('fc-card-wrap').classList.remove('fc-hidden');
+        renderStudyCard();
+      };
+      const onFresh = () => {
+        cleanup();
+        $('fc-resume-prompt').classList.add('fc-hidden');
+        _fcStartFresh(deck, due);
+        $('fc-card-wrap').classList.remove('fc-hidden');
+        renderStudyCard();
+      };
+      const cleanup = () => {
+        $('fc-resume-yes').removeEventListener('click', onResume);
+        $('fc-resume-no').removeEventListener('click', onFresh);
+      };
+      $('fc-resume-yes').addEventListener('click', onResume);
+      $('fc-resume-no').addEventListener('click', onFresh);
+      return;
+    }
+  }
+
+  // Fresh start
+  _fcStartFresh(deck, due);
   $('fc-study-deck-name').textContent = deck.name;
   $('fc-session-complete').classList.add('fc-hidden');
+  $('fc-resume-prompt').classList.add('fc-hidden');
   $('fc-card-wrap').classList.remove('fc-hidden');
   fcShowPanel('study');
   renderStudyCard();
@@ -590,10 +676,12 @@ function gradeCard(g) {
 
   save();
   _fcStudyIdx++;
+  fcSaveSessionProgress();
   renderStudyCard();
 }
 
 function showSessionComplete() {
+  fcClearSavedSession();
   // Update streak for the current deck
   const deck = fcCurrentDeck();
   if (deck) {
