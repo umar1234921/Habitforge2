@@ -1677,6 +1677,7 @@ function initErrorLog() {
       const mid = uid();
       _elMistakes.push({ id: mid, fixed: false });
       _elRenderFormMistakes();
+      // Brief delay lets the DOM settle after innerHTML update before focusing
       setTimeout(() => { const el = $(`el-m-desc-${mid}`); if (el) el.focus(); }, 50);
     });
   }
