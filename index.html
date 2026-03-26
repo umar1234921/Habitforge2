@@ -67,6 +67,9 @@
       <li><button class="nav-btn" data-view="flashcards">
         <span class="nav-icon">◇</span><span>Flashcards</span>
       </button></li>
+      <li><button class="nav-btn" data-view="errorlog">
+        <span class="nav-icon">◬</span><span>Error Log</span>
+      </button></li>
     </ul>
 
     <!-- Quick Links -->
@@ -965,6 +968,100 @@
           <!-- Session complete screen -->
           <div class="fc-session-complete fc-hidden" id="fc-session-complete"></div>
         </div>
+      </section>
+
+      <!-- ═══ ERROR LOG ═══ -->
+      <section class="view" id="view-errorlog">
+        <div class="vh">
+          <h1 class="vh-title">ERROR LOG</h1>
+          <p class="vh-sub">Track your mistakes. Fix them. Never lose those marks again.</p>
+        </div>
+
+        <div class="el-layout">
+          <!-- Main column -->
+          <div class="el-main">
+
+            <!-- Log form -->
+            <div class="card">
+              <div class="card-lbl">LOG A PAST PAPER SESSION</div>
+              <div class="el-form">
+                <div class="el-form-row">
+                  <div class="el-field">
+                    <label class="sleep-field-lbl">DATE</label>
+                    <input type="date" class="field-in" id="el-date"/>
+                  </div>
+                  <div class="el-field el-field--grow">
+                    <label class="sleep-field-lbl">SUBJECT</label>
+                    <select class="field-sel" id="el-subject">
+                      <option value="">-- Select Subject --</option>
+                    </select>
+                  </div>
+                  <div class="el-field el-field--grow">
+                    <label class="sleep-field-lbl">PAPER / EXAM</label>
+                    <input class="field-in" id="el-paper" list="el-paper-suggestions"
+                           placeholder="e.g. June 2023 Paper 1"/>
+                    <datalist id="el-paper-suggestions"></datalist>
+                  </div>
+                </div>
+
+                <div class="el-mistakes-header">
+                  <span class="sleep-field-lbl">MISTAKES</span>
+                  <button class="btn-ghost el-add-btn" id="el-add-mistake-btn">+ ADD MISTAKE</button>
+                </div>
+                <div id="el-mistakes-container">
+                  <p class="empty-s">No mistakes added yet. Click &ldquo;+ ADD MISTAKE&rdquo; above.</p>
+                </div>
+
+                <button class="btn-primary" id="el-log-btn">LOG SESSION</button>
+              </div>
+            </div>
+
+            <!-- History -->
+            <div class="card">
+              <div class="card-lbl">ERROR HISTORY</div>
+              <div class="el-filter-row">
+                <button class="fb active" data-ef="all">ALL</button>
+                <button class="fb" data-ef="unfixed">UNFIXED</button>
+                <button class="fb" data-ef="fixed">FIXED</button>
+              </div>
+              <div id="el-history-list"></div>
+            </div>
+
+          </div><!-- /el-main -->
+
+          <!-- Side panel -->
+          <div class="el-side">
+            <div class="card">
+              <div class="card-lbl">STATS</div>
+              <div class="el-stats-grid">
+                <div class="el-stat-item">
+                  <span class="el-stat-n" id="el-stat-sessions">0</span>
+                  <span class="el-stat-l">sessions</span>
+                </div>
+                <div class="el-stat-item">
+                  <span class="el-stat-n" id="el-stat-total">0</span>
+                  <span class="el-stat-l">mistakes</span>
+                </div>
+                <div class="el-stat-item">
+                  <span class="el-stat-n" id="el-stat-marks">0</span>
+                  <span class="el-stat-l">marks lost</span>
+                </div>
+                <div class="el-stat-item">
+                  <span class="el-stat-n" id="el-stat-unfixed">0</span>
+                  <span class="el-stat-l">unfixed</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-lbl">SUBJECT BREAKDOWN</div>
+              <div id="el-subject-breakdown">
+                <p class="empty-s">No data yet.</p>
+              </div>
+            </div>
+          </div><!-- /el-side -->
+
+        </div><!-- /el-layout -->
       </section>
 
     </div><!-- /views -->

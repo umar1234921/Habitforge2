@@ -22,6 +22,7 @@ const S = {
   timetable: {},       // { 'YYYY-MM-DD': [ { id, startTime, endTime, subject, task, notes } ] }
   sleepLog: [],        // [ { id, date, preSleep, duration, grogginess, postSleep, notes } ]
   flashcardDecks: [],  // [ { id, name, subject, examDate, dailyTarget, cards:[] } ]
+  errorLog: [],        // [ { id, date, subject, paper, mistakes: [{ id, desc, marks, topicId, topicName, fixed }] } ]
   quickLinks: [
     { emoji: '🔗', label: '', url: '' },
     { emoji: '🔗', label: '', url: '' },
@@ -48,6 +49,7 @@ function load() {
   // Safety: ensure new fields exist even when loading old saved data
   if (!S.specAmber || typeof S.specAmber !== 'object') S.specAmber = {};
   if (!Array.isArray(S.focusLog)) S.focusLog = [];
+  if (!Array.isArray(S.errorLog)) S.errorLog = [];
 }
 function fmt(sec) {
   return `${String(Math.floor(sec/60)).padStart(2,'0')}:${String(sec%60).padStart(2,'0')}`;
@@ -157,6 +159,7 @@ function switchView(name) {
   if (name === 'sleep')       renderSleepJournal();
   if (name === 'timetable')   renderTimetable();
   if (name === 'flashcards')  renderFlashcards();
+  if (name === 'errorlog')    renderErrorLog();
 }
 
 // ─── TOPBAR / COUNTDOWN ───────────────────────────────────
@@ -1573,6 +1576,308 @@ function checkDailyReset() {
   localStorage.setItem('hf_gcse_lastrun', today);
 }
 
+// ─── ERROR LOG ────────────────────────────────────────────
+let _elMistakes = []; // temp list of mistakes for the current form
+let elFilter = 'all';
+
+function _elBuildPaperDatalist(subjectKey) {
+  const datalist = $('el-paper-suggestions');
+  if (!datalist) return;
+  const exams = (GCSE_SUBJECTS[subjectKey] && GCSE_SUBJECTS[subjectKey].exams) || [];
+  datalist.innerHTML = exams.map(e => `<option value="${_escAttr(e.paper)}">`).join('');
+}
+
+function _elTopicOptions(subjectKey) {
+  const topics = (GCSE_SUBJECTS[subjectKey] && GCSE_SUBJECTS[subjectKey].topics) || [];
+  if (!topics.length) return '<option value="">-- Select Subject First --</option>';
+  return '<option value="">-- Select Topic --</option>' +
+    topics.map(t => `<option value="${_escAttr(t.id)}">${_escHtml(t.topic)}</option>`).join('');
+}
+
+function _elRenderFormMistakes() {
+  const container = $('el-mistakes-container');
+  if (!container) return;
+  if (!_elMistakes.length) {
+    container.innerHTML = '<p class="empty-s">No mistakes added yet. Click &ldquo;+ ADD MISTAKE&rdquo; above.</p>';
+    return;
+  }
+  const subjectKey = ($('el-subject') && $('el-subject').value) || '';
+  const topicOptions = _elTopicOptions(subjectKey);
+  container.innerHTML = _elMistakes.map((m, i) => `
+    <div class="el-mistake-row" data-mid="${m.id}">
+      <span class="el-mistake-num">${i + 1}</span>
+      <div class="el-mistake-fields">
+        <input class="field-in el-m-desc" id="el-m-desc-${m.id}"
+               placeholder="What went wrong? e.g. Forgot to simplify, sign error"/>
+        <div class="el-mistake-meta">
+          <div class="el-m-field">
+            <label class="el-m-lbl">MARKS LOST</label>
+            <input type="number" class="field-in el-m-marks" id="el-m-marks-${m.id}"
+                   min="0" max="99" step="0.5" placeholder="0"/>
+          </div>
+          <div class="el-m-field el-m-field--grow">
+            <label class="el-m-lbl">TOPIC</label>
+            <select class="field-sel el-topic-sel el-m-topic" id="el-m-topic-${m.id}">
+              ${topicOptions}
+            </select>
+          </div>
+          <div class="el-m-field">
+            <label class="el-m-lbl">FIXED?</label>
+            <button class="el-fixed-form-btn ${m.fixed ? 'el-fixed-form-btn--done' : ''}"
+                    data-mid="${m.id}">${m.fixed ? '✓ Fixed' : '○ Not yet'}</button>
+          </div>
+        </div>
+      </div>
+      <button class="ti-del el-m-remove" data-mid="${m.id}" title="Remove">✕</button>
+    </div>
+  `).join('');
+
+  container.querySelectorAll('.el-m-remove').forEach(btn => {
+    btn.addEventListener('click', () => {
+      _elMistakes = _elMistakes.filter(m => m.id !== btn.dataset.mid);
+      _elRenderFormMistakes();
+    });
+  });
+
+  container.querySelectorAll('.el-fixed-form-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const m = _elMistakes.find(x => x.id === btn.dataset.mid);
+      if (!m) return;
+      m.fixed = !m.fixed;
+      btn.classList.toggle('el-fixed-form-btn--done', m.fixed);
+      btn.textContent = m.fixed ? '✓ Fixed' : '○ Not yet';
+    });
+  });
+}
+
+function initErrorLog() {
+  if (!Array.isArray(S.errorLog)) S.errorLog = [];
+
+  const dateIn = $('el-date');
+  if (dateIn) dateIn.value = todayKey();
+
+  // Populate subject dropdown dynamically from GCSE_SUBJECTS
+  const subjSel = $('el-subject');
+  if (subjSel) {
+    Object.entries(GCSE_SUBJECTS).forEach(([key, subj]) => {
+      const opt = document.createElement('option');
+      opt.value = key;
+      opt.textContent = `${subj.icon} ${subj.name}`;
+      subjSel.appendChild(opt);
+    });
+    subjSel.addEventListener('change', () => {
+      _elBuildPaperDatalist(subjSel.value);
+      _elRenderFormMistakes(); // refresh topic dropdowns with new subject
+    });
+  }
+
+  const addBtn = $('el-add-mistake-btn');
+  if (addBtn) {
+    addBtn.addEventListener('click', () => {
+      const mid = uid();
+      _elMistakes.push({ id: mid, fixed: false });
+      _elRenderFormMistakes();
+      // Brief delay lets the DOM settle after innerHTML update before focusing
+      setTimeout(() => { const el = $(`el-m-desc-${mid}`); if (el) el.focus(); }, 50);
+    });
+  }
+
+  const logBtn = $('el-log-btn');
+  if (logBtn) logBtn.addEventListener('click', logErrorSession);
+
+  document.querySelectorAll('.fb[data-ef]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.fb[data-ef]').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      elFilter = btn.dataset.ef;
+      renderErrorHistory();
+    });
+  });
+
+  renderErrorLog();
+}
+
+function logErrorSession() {
+  if (!Array.isArray(S.errorLog)) S.errorLog = [];
+  const date    = ($('el-date') && $('el-date').value)    || todayKey();
+  const subject = ($('el-subject') && $('el-subject').value) || '';
+  const paper   = ($('el-paper') && $('el-paper').value.trim()) || '';
+
+  if (!subject) { toast('Select a subject', 'err'); if ($('el-subject')) $('el-subject').focus(); return; }
+  if (!paper)   { toast('Enter the paper / exam name', 'err'); if ($('el-paper')) $('el-paper').focus(); return; }
+  if (!_elMistakes.length) { toast('Add at least one mistake', 'err'); return; }
+
+  const subjectTopics = (GCSE_SUBJECTS[subject] && GCSE_SUBJECTS[subject].topics) || [];
+  const mistakes = _elMistakes.map(m => {
+    const desc    = ($(`el-m-desc-${m.id}`) && $(`el-m-desc-${m.id}`).value.trim())    || '';
+    const marks   = parseFloat(($(`el-m-marks-${m.id}`) && $(`el-m-marks-${m.id}`).value)) || 0;
+    const topicId = ($(`el-m-topic-${m.id}`) && $(`el-m-topic-${m.id}`).value)            || '';
+    const topicObj = subjectTopics.find(t => t.id === topicId);
+    return { id: uid(), desc, marks, topicId, topicName: (topicObj && topicObj.topic) || '', fixed: m.fixed || false };
+  }).filter(m => m.desc);
+
+  if (!mistakes.length) { toast('Enter a description for at least one mistake', 'err'); return; }
+
+  S.errorLog.unshift({ id: uid(), date, subject, paper, mistakes });
+
+  // Reset form
+  if ($('el-paper')) $('el-paper').value = '';
+  if ($('el-date'))  $('el-date').value  = todayKey();
+  _elMistakes = [];
+  _elRenderFormMistakes();
+
+  save();
+  addXP(5);
+  renderErrorLog();
+  toast('Error session logged ✓');
+}
+
+function deleteErrorSession(sid) {
+  S.errorLog = S.errorLog.filter(s => s.id !== sid);
+  save();
+  renderErrorLog();
+}
+
+function toggleMistakeFixed(sid, mid) {
+  const session = S.errorLog.find(s => s.id === sid);
+  if (!session) return;
+  const mistake = session.mistakes.find(m => m.id === mid);
+  if (!mistake) return;
+  mistake.fixed = !mistake.fixed;
+  if (mistake.fixed) addXP(2);
+  save();
+  renderErrorHistory();
+  renderErrorStats();
+}
+
+function renderErrorLog() {
+  if (!Array.isArray(S.errorLog)) S.errorLog = [];
+  renderErrorHistory();
+  renderErrorStats();
+}
+
+function renderErrorHistory() {
+  const el = $('el-history-list');
+  if (!el) return;
+  if (!Array.isArray(S.errorLog)) S.errorLog = [];
+
+  let entries = S.errorLog.slice().sort((a, b) => b.date.localeCompare(a.date));
+
+  if (elFilter === 'unfixed') {
+    entries = entries
+      .map(s => Object.assign({}, s, { mistakes: (s.mistakes || []).filter(m => !m.fixed) }))
+      .filter(s => s.mistakes.length);
+  } else if (elFilter === 'fixed') {
+    entries = entries
+      .map(s => Object.assign({}, s, { mistakes: (s.mistakes || []).filter(m => m.fixed) }))
+      .filter(s => s.mistakes.length);
+  }
+
+  if (!entries.length) {
+    el.innerHTML = '<p class="empty-s">No error sessions logged yet. Log a past paper above.</p>';
+    return;
+  }
+
+  el.innerHTML = entries.map(session => {
+    const subj      = GCSE_SUBJECTS[session.subject] || {};
+    const icon      = subj.icon || '📝';
+    const subjName  = subj.name || session.subject || 'Unknown';
+    const d         = new Date(session.date + 'T12:00:00');
+    const dateStr   = d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }).toUpperCase();
+    const mistakes  = session.mistakes || [];
+    const totalMarks = mistakes.reduce((s, m) => s + (m.marks || 0), 0);
+    const fixedCount = mistakes.filter(m => m.fixed).length;
+    const allFixed   = mistakes.length > 0 && fixedCount === mistakes.length;
+
+    return `
+    <div class="el-entry ${allFixed ? 'el-entry--all-fixed' : ''}">
+      <div class="el-entry-hdr">
+        <div class="el-entry-hdr-left">
+          <span class="el-entry-date">${dateStr}</span>
+          <span class="el-entry-subj">${icon} ${_escHtml(subjName)}</span>
+          <span class="el-entry-paper">${_escHtml(session.paper)}</span>
+        </div>
+        <div class="el-entry-hdr-right">
+          ${totalMarks > 0 ? `<span class="el-marks-lost">&#8722;${totalMarks} marks</span>` : ''}
+          <span class="el-fixed-count ${allFixed ? 'el-fixed-count--all' : ''}">${fixedCount}/${mistakes.length} fixed</span>
+          <button class="ti-del el-session-del" data-sid="${session.id}" title="Delete session">&#10005;</button>
+        </div>
+      </div>
+      <div class="el-mistakes-list">
+        ${mistakes.map(m => `
+          <div class="el-m-item ${m.fixed ? 'el-m-item--fixed' : ''}">
+            <button class="el-toggle-fixed ${m.fixed ? 'el-toggle-fixed--done' : ''}"
+                    data-sid="${session.id}" data-mid="${m.id}"
+                    title="${m.fixed ? 'Mark as unfixed' : 'Mark as fixed'}">${m.fixed ? '&#10003;' : '&#9711;'}</button>
+            <div class="el-m-body">
+              <span class="el-m-desc">${_escHtml(m.desc)}</span>
+              ${m.topicName ? `<span class="el-m-topic">${_escHtml(m.topicName)}</span>` : ''}
+            </div>
+            ${m.marks ? `<span class="el-m-marks">&#8722;${m.marks}m</span>` : ''}
+          </div>`).join('')}
+      </div>
+    </div>`;
+  }).join('');
+
+  el.querySelectorAll('.el-session-del').forEach(btn => {
+    btn.addEventListener('click', () => deleteErrorSession(btn.dataset.sid));
+  });
+  el.querySelectorAll('.el-toggle-fixed').forEach(btn => {
+    btn.addEventListener('click', () => toggleMistakeFixed(btn.dataset.sid, btn.dataset.mid));
+  });
+}
+
+function renderErrorStats() {
+  if (!Array.isArray(S.errorLog)) return;
+  const sessions    = S.errorLog;
+  const allMistakes = sessions.reduce((acc, s) => acc.concat(s.mistakes || []), []);
+  const totalMarks  = allMistakes.reduce((s, m) => s + (m.marks || 0), 0);
+  const unfixed     = allMistakes.filter(m => !m.fixed).length;
+
+  const ssEl = $('el-stat-sessions'); if (ssEl) ssEl.textContent = sessions.length;
+  const tmEl = $('el-stat-total');    if (tmEl) tmEl.textContent = allMistakes.length;
+  const mkEl = $('el-stat-marks');    if (mkEl) mkEl.textContent = totalMarks;
+  const ufEl = $('el-stat-unfixed');  if (ufEl) ufEl.textContent = unfixed;
+
+  const breakEl = $('el-subject-breakdown');
+  if (!breakEl) return;
+  if (!sessions.length) { breakEl.innerHTML = '<p class="empty-s">No data yet.</p>'; return; }
+
+  const bySubject = {};
+  sessions.forEach(s => {
+    if (!bySubject[s.subject]) bySubject[s.subject] = { mistakes: 0, marks: 0, unfixed: 0 };
+    (s.mistakes || []).forEach(m => {
+      bySubject[s.subject].mistakes++;
+      bySubject[s.subject].marks += (m.marks || 0);
+      if (!m.fixed) bySubject[s.subject].unfixed++;
+    });
+  });
+
+  breakEl.innerHTML = Object.entries(bySubject)
+    .sort((a, b) => b[1].unfixed - a[1].unfixed)
+    .map(([key, stats]) => {
+      const subj = GCSE_SUBJECTS[key];
+      if (!subj) return '';
+      const fixedLabel = stats.unfixed > 0
+        ? `<span class="el-subj-unfixed">${stats.unfixed} unfixed</span>`
+        : `<span class="el-subj-done">&#10003; all fixed</span>`;
+      return `
+      <div class="el-subj-row">
+        <span class="el-subj-icon">${subj.icon}</span>
+        <div class="el-subj-info">
+          <span class="el-subj-name">${_escHtml(subj.name)}</span>
+          <div class="el-subj-stats">
+            <span>${stats.mistakes} mistake${stats.mistakes !== 1 ? 's' : ''}</span>
+            ${stats.marks > 0 ? `<span class="el-subj-marks">&#8722;${stats.marks}m</span>` : ''}
+            ${fixedLabel}
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+}
+
+
+
 // ─── QUICK LINKS ──────────────────────────────────────────
 function _qlEnsure() {
   if (!Array.isArray(S.quickLinks)) S.quickLinks = [];
@@ -1692,6 +1997,7 @@ function init() {
   initFlashcards();
   initTimetable();
   initSleepJournal();
+  initErrorLog();
 
   updateXPDisplay();
   updateStreakDisplay();

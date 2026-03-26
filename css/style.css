@@ -3161,3 +3161,144 @@ body::before {
   font-weight: 700;
   color: var(--text);
 }
+
+
+/* ═══════════════════════════════════════════════════════════
+   ERROR LOG
+   ═══════════════════════════════════════════════════════════ */
+
+.el-layout { display: flex; gap: 20px; align-items: flex-start; }
+.el-main   { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 20px; }
+.el-side   { width: 280px; flex-shrink: 0; display: flex; flex-direction: column; gap: 20px; }
+
+/* ── Form ── */
+.el-form       { display: flex; flex-direction: column; gap: 14px; }
+.el-form-row   { display: flex; gap: 10px; flex-wrap: wrap; }
+.el-field      { display: flex; flex-direction: column; gap: 5px; }
+.el-field--grow { flex: 1; min-width: 160px; }
+
+.el-mistakes-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-top: 2px;
+}
+.el-add-btn { font-size: 12px; padding: 5px 12px; }
+
+/* ── Mistake rows (form) ── */
+.el-mistake-row {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 12px; background: var(--bg-3);
+  border-radius: 8px; border: 1px solid var(--border);
+  margin-bottom: 8px;
+}
+.el-mistake-num {
+  font-family: var(--f-mono); font-size: 11px;
+  color: var(--text-3); min-width: 18px;
+  padding-top: 9px; font-weight: 700;
+}
+.el-mistake-fields { flex: 1; display: flex; flex-direction: column; gap: 8px; }
+.el-mistake-meta   { display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-end; }
+.el-m-field        { display: flex; flex-direction: column; gap: 4px; }
+.el-m-field--grow  { flex: 1; min-width: 140px; }
+.el-m-lbl {
+  font-family: var(--f-mono); font-size: 9px;
+  letter-spacing: 1px; color: var(--text-3); font-weight: 600;
+}
+input.el-m-marks { width: 72px; }
+
+.el-fixed-form-btn {
+  padding: 6px 12px; border-radius: 20px;
+  border: 1.5px solid var(--border); background: transparent;
+  color: var(--text-3); font-family: var(--f-mono); font-size: 11px;
+  cursor: pointer; transition: all .15s; white-space: nowrap;
+}
+.el-fixed-form-btn:hover           { border-color: var(--accent-3); color: var(--accent-3); }
+.el-fixed-form-btn.el-fixed-form-btn--done {
+  border-color: var(--accent-3); color: var(--accent-3);
+  background: color-mix(in srgb, var(--accent-3) 10%, transparent);
+}
+
+/* ── History ── */
+.el-filter-row { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
+
+.el-entry {
+  background: var(--bg-3); border-radius: 10px;
+  border: 1px solid var(--border); padding: 14px;
+  margin-bottom: 10px; transition: border-color .2s;
+}
+.el-entry--all-fixed {
+  border-color: color-mix(in srgb, var(--accent-3) 40%, transparent);
+}
+.el-entry-hdr {
+  display: flex; justify-content: space-between;
+  align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 10px;
+}
+.el-entry-hdr-left  { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.el-entry-hdr-right { display: flex; align-items: center; gap: 8px; }
+.el-entry-date {
+  font-family: var(--f-mono); font-size: 10px;
+  letter-spacing: .5px; color: var(--text-3);
+}
+.el-entry-subj {
+  font-family: var(--f-sans); font-size: 12px;
+  font-weight: 600; color: var(--text-1);
+}
+.el-entry-paper {
+  font-family: var(--f-mono); font-size: 10px; color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  padding: 2px 8px; border-radius: 10px;
+}
+.el-marks-lost {
+  font-family: var(--f-mono); font-size: 11px;
+  color: var(--accent-5); font-weight: 600;
+}
+.el-fixed-count       { font-family: var(--f-mono); font-size: 10px; color: var(--text-3); }
+.el-fixed-count--all  { color: var(--accent-3); font-weight: 700; }
+
+/* ── Mistake list (history) ── */
+.el-mistakes-list { display: flex; flex-direction: column; gap: 6px; }
+.el-m-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 10px; border-radius: 6px;
+  background: var(--bg-2); transition: opacity .15s;
+}
+.el-m-item--fixed { opacity: .55; }
+
+.el-toggle-fixed {
+  width: 26px; height: 26px; border-radius: 50%;
+  border: 1.5px solid var(--border); background: transparent;
+  color: var(--text-3); font-size: 13px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; flex-shrink: 0; transition: all .15s;
+}
+.el-toggle-fixed:hover          { border-color: var(--accent-3); color: var(--accent-3); }
+.el-toggle-fixed.el-toggle-fixed--done {
+  border-color: var(--accent-3); color: var(--accent-3);
+  background: color-mix(in srgb, var(--accent-3) 15%, transparent);
+}
+.el-m-body     { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.el-m-desc     { font-size: 13px; color: var(--text-1); white-space: normal; }
+.el-m-topic    { font-family: var(--f-mono); font-size: 10px; color: var(--text-3); letter-spacing: .5px; }
+.el-m-marks    { font-family: var(--f-mono); font-size: 11px; color: var(--accent-5); font-weight: 600; flex-shrink: 0; }
+
+/* ── Stats ── */
+.el-stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 4px 0; }
+.el-stat-item  { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.el-stat-n     { font-family: var(--f-sans); font-size: 30px; font-weight: 700; color: var(--accent); line-height: 1; }
+.el-stat-l     { font-family: var(--f-mono); font-size: 9px; letter-spacing: 1px; color: var(--text-3); text-align: center; }
+
+/* ── Subject breakdown ── */
+.el-subj-row   { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.el-subj-row:last-child { border-bottom: none; }
+.el-subj-icon  { font-size: 18px; flex-shrink: 0; }
+.el-subj-info  { flex: 1; display: flex; flex-direction: column; gap: 3px; }
+.el-subj-name  { font-family: var(--f-sans); font-size: 12px; font-weight: 600; color: var(--text-1); }
+.el-subj-stats { display: flex; gap: 8px; font-family: var(--f-mono); font-size: 10px; color: var(--text-3); flex-wrap: wrap; }
+.el-subj-marks   { color: var(--accent-5); }
+.el-subj-unfixed { color: var(--accent-6); }
+.el-subj-done    { color: var(--accent-3); }
+
+/* ── Responsive ── */
+@media (max-width: 900px) {
+  .el-layout { flex-direction: column; }
+  .el-side   { width: 100%; }
+}
