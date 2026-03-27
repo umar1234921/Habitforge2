@@ -995,7 +995,7 @@ const GCSE_SUBJECTS = {
     color: "#f97316",
     icon: "🇩🇪",
     exams: [
-      { paper: "Speaking (H)",  date: "2026-04-13", time: "AM" },
+      { paper: "Speaking (H)",  date: "2026-04-17", time: "AM" },
       { paper: "Listening (H)", date: "2026-05-07", time: "PM" },
       { paper: "Reading (H)",   date: "2026-05-14", time: "PM" },
       { paper: "Writing (H)",   date: "2026-06-01", time: "PM" },
