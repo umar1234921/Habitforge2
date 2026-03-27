@@ -451,6 +451,42 @@ body::before {
 .hamburger { display: none; background: none; border: none; color: var(--text-3); font-size: 20px; cursor: pointer; }
 .tb-date { font-family: var(--f-mono); font-size: 11px; letter-spacing: 1px; color: var(--text-3); }
 .tb-right { display: flex; align-items: center; gap: 20px; }
+/* Topbar live timer pill */
+.tb-timer {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: rgba(88,101,242,.12);
+  border: 1px solid var(--accent);
+  border-radius: 20px;
+  padding: 4px 13px;
+  cursor: pointer;
+  transition: background .2s;
+}
+.tb-timer:hover { background: rgba(88,101,242,.22); }
+.tb-timer-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: timerPulse 1.5s ease-in-out infinite;
+  flex-shrink: 0;
+}
+.tb-timer.tb-timer-break .tb-timer-dot { background: var(--accent-3); }
+.tb-timer-time {
+  font-family: var(--f-mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  letter-spacing: 1px;
+}
+.tb-timer.tb-timer-break .tb-timer-time { color: var(--accent-3); }
+@keyframes timerPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .4; }
+}
+
+
 .tb-streak { display: flex; align-items: baseline; gap: 6px; }
 .ts-num { font-family: var(--f-display); font-size: 22px; font-weight: 700; color: var(--accent-4); line-height: 1; }
 .ts-label { font-family: var(--f-mono); font-size: 9px; letter-spacing: 1px; color: var(--text-3); }
@@ -2456,6 +2492,42 @@ body::before {
   gap: 12px;
   margin-bottom: 20px;
   flex-wrap: wrap;
+}
+/* Fullscreen toggle button */
+.fc-fs-btn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-3);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 17px;
+  cursor: pointer;
+  flex-shrink: 0;
+  line-height: 1;
+  transition: border-color .15s, color .15s;
+}
+.fc-fs-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+/* Fullscreen mode — make study content fill the screen */
+#view-flashcards:fullscreen,
+#view-flashcards:-webkit-full-screen {
+  display: block;
+  padding: 28px;
+  background: var(--bg);
+  overflow-y: auto;
+  max-width: 100%;
+}
+#view-flashcards:fullscreen .fc-card,
+#view-flashcards:-webkit-full-screen .fc-card {
+  max-width: 800px;
+}
+#view-flashcards:fullscreen .fc-card-inner,
+#view-flashcards:-webkit-full-screen .fc-card-inner {
+  min-height: 280px;
+}
+#view-flashcards:fullscreen .fc-card-wrap,
+#view-flashcards:-webkit-full-screen .fc-card-wrap {
+  padding-top: 20px;
 }
 .fc-study-deck-name {
   font-family: var(--f-display);

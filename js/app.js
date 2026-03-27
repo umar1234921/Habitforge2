@@ -558,6 +558,13 @@ function initPomodoro() {
     if (!pomRunning) togglePomo();
   });
 
+  // Topbar timer pill — click to jump to Deep Work view
+  $('tb-timer').addEventListener('click', () => {
+    switchView('pomodoro');
+    document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+    document.querySelector('[data-view="pomodoro"]').classList.add('active');
+  });
+
   updatePomoDisplay();
   renderPomoLog();
   updateDWStats();
@@ -634,6 +641,7 @@ function updatePomoDisplay() {
   $('pq-state').textContent = lbl;
   // Color near end
   $('pt-prog').style.stroke = pomSec < 60 && pomMode==='work' ? 'var(--accent-3)' : 'var(--accent)';
+  updateTimerTopbar();
 }
 function renderPomoRing(prog) {
   $('pt-prog').style.strokeDashoffset = CIRC - (CIRC * prog);
@@ -722,6 +730,25 @@ function resetFreeFocus() {
 
 function updateFreeFocusDisplay() {
   $('ff-time').textContent = fmtHMS(focusSec);
+  updateTimerTopbar();
+}
+
+// ─── TOPBAR TIMER PILL ────────────────────────────────────
+function updateTimerTopbar() {
+  const el = $('tb-timer');
+  const timeEl = $('tb-timer-time');
+  if (!el || !timeEl) return;
+  if (pomRunning) {
+    el.style.display = '';
+    el.classList.toggle('tb-timer-break', pomMode !== 'work');
+    timeEl.textContent = fmt(pomSec);
+  } else if (focusRunning) {
+    el.style.display = '';
+    el.classList.remove('tb-timer-break');
+    timeEl.textContent = fmtHMS(focusSec);
+  } else {
+    el.style.display = 'none';
+  }
 }
 
 function renderFocusLog() {
