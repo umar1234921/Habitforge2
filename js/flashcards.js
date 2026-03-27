@@ -106,9 +106,17 @@ const SRS = {
       c => !c.nextReview || c.nextReview <= deck.examDate
     ).length;
 
+    // Count only cards not yet reviewed, due today, or overdue.
+    // Cards already studied today have nextReview set to a future date and are
+    // excluded here, so doing extra cards today lowers the required/day figure.
+    const today = todayLocalKey();
+    const remainingNow = deck.cards.filter(
+      c => !c.nextReview || c.nextReview <= today
+    ).length;
+
     const requiredPerDay = daysToExam > 0
-      ? Math.ceil(totalDueBeforeExam / daysToExam)
-      : totalDueBeforeExam;
+      ? Math.ceil(remainingNow / daysToExam)
+      : remainingNow;
     const effectiveDailyTarget = Math.max(deck.dailyTarget || 20, requiredPerDay);
     const behindSchedule       = requiredPerDay > (deck.dailyTarget || 20);
 
@@ -1013,6 +1021,11 @@ function initFlashcards() {
   document.querySelectorAll('.fc-grade').forEach(btn =>
     btn.addEventListener('click', () => gradeCard(parseInt(btn.dataset.grade))));
 
+  // Fullscreen
+  $('fc-fs-btn').addEventListener('click', toggleFCFullscreen);
+  document.addEventListener('fullscreenchange', updateFCFullscreenBtn);
+  document.addEventListener('webkitfullscreenchange', updateFCFullscreenBtn);
+
   // Keyboard shortcuts during study
   document.addEventListener('keydown', e => {
     if ($('fc-study-panel').classList.contains('fc-hidden')) return;
@@ -1024,4 +1037,24 @@ function initFlashcards() {
       if (e.key === '4') gradeCard(3);
     }
   });
+}
+
+// ─── FULLSCREEN ───────────────────────────────────────────
+function toggleFCFullscreen() {
+  const el = $('view-flashcards');
+  if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+    const req = el.requestFullscreen || el.webkitRequestFullscreen;
+    if (req) req.call(el).catch(err => console.warn('Fullscreen error:', err));
+  } else {
+    const exit = document.exitFullscreen || document.webkitExitFullscreen;
+    if (exit) exit.call(document);
+  }
+}
+
+function updateFCFullscreenBtn() {
+  const btn = $('fc-fs-btn');
+  if (!btn) return;
+  const active = !!(document.fullscreenElement || document.webkitFullscreenElement);
+  btn.textContent = active ? '✕ Exit' : '⛶';
+  btn.title = active ? 'Exit fullscreen (Esc)' : 'Enter fullscreen';
 }
