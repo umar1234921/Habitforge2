@@ -1179,6 +1179,7 @@
   const CLOUD_SAVE_RETRY_DELAYS_MS = [5000, 10000, 20000];
   const CLOUD_SAVE_MAX_RETRY_WINDOW_MS = 120000;
   const CLOUD_SAVE_ALL_DECKS_KEY = '__all__';
+  const CLOUD_RETRY_TOAST_PREFIX = 'Retrying cloud sync';
   const cloudSaveRetryByDeck = new Map();
   // Firestore doc limit is 1 MiB; keep chunks comfortably below that to allow JSON overhead.
   const MAX_MEDIA_CHUNK_CHARS = 700000;
@@ -1315,6 +1316,7 @@
       // Write chunks sequentially (not all in parallel) to avoid triggering Firestore
       // RESOURCE_EXHAUSTED rate limits on large decks with many image chunks.
       // Failed chunks are retried in later passes with exponential back-off.
+      // This is separate from fbSave() retries, which retry the deck-level cloud save.
       let pendingChunkIndexes = chunks.map((_, i) => i);
       let attempt = 1;
       const retryStartAt = Date.now();
@@ -1344,10 +1346,10 @@
           break;
         }
         const nextAttempt = attempt + 1;
-        const delayMs = CLOUD_SAVE_RETRY_DELAYS_MS[Math.min(nextAttempt - 2, CLOUD_SAVE_RETRY_DELAYS_MS.length - 1)];
+        const delayMs = getRetryDelayMs(attempt);
         console.warn(`[HabitForge] Retrying ${failedChunkIndexes.length} media chunks for deck ${deck.id} (attempt ${nextAttempt}/${CLOUD_SAVE_MAX_ATTEMPTS}) in ${delayMs}ms`);
         if (typeof toast === 'function') {
-          toast(`Retrying cloud sync (Attempt ${nextAttempt}/${CLOUD_SAVE_MAX_ATTEMPTS})...`, 'info');
+          toast(getCloudRetryToast(nextAttempt), 'info');
         }
         await new Promise(r => setTimeout(r, delayMs));
         attempt = nextAttempt;
@@ -1425,10 +1427,22 @@
     });
   }
 
+  function createCloudRetryState(attempt, firstFailureAt, timer = null) {
+    return { attempt, firstFailureAt, timer };
+  }
+
+  function getRetryDelayMs(attempt) {
+    return CLOUD_SAVE_RETRY_DELAYS_MS[Math.min(attempt - 1, CLOUD_SAVE_RETRY_DELAYS_MS.length - 1)];
+  }
+
+  function getCloudRetryToast(attempt) {
+    return `${CLOUD_RETRY_TOAST_PREFIX} (Attempt ${attempt}/${CLOUD_SAVE_MAX_ATTEMPTS})...`;
+  }
+
   function queueCloudRetry(deckId, saveScope = null) {
     if (!deckId || !fbUid) return false;
     const now = Date.now();
-    const prev = cloudSaveRetryByDeck.get(deckId) || { attempt: 1, firstFailureAt: now, timer: null };
+    const prev = cloudSaveRetryByDeck.get(deckId) || createCloudRetryState(1, now);
     if (prev.timer) return true;
 
     if ((now - prev.firstFailureAt) >= CLOUD_SAVE_MAX_RETRY_WINDOW_MS || prev.attempt >= CLOUD_SAVE_MAX_ATTEMPTS) {
@@ -1438,28 +1452,21 @@
     }
 
     const nextAttempt = prev.attempt + 1;
-    const delayMs = CLOUD_SAVE_RETRY_DELAYS_MS[Math.min(nextAttempt - 2, CLOUD_SAVE_RETRY_DELAYS_MS.length - 1)];
+    const delayMs = getRetryDelayMs(prev.attempt);
     console.warn(`[HabitForge] Scheduling cloud retry for ${deckId} (attempt ${nextAttempt}/${CLOUD_SAVE_MAX_ATTEMPTS}) in ${delayMs}ms`);
     const timer = setTimeout(() => {
       const current = cloudSaveRetryByDeck.get(deckId);
       if (!current) return;
-      cloudSaveRetryByDeck.set(deckId, {
-        ...current,
-        attempt: nextAttempt,
-        timer: null
-      });
+      cloudSaveRetryByDeck.set(deckId, createCloudRetryState(nextAttempt, current.firstFailureAt, null));
       if (typeof toast === 'function') {
-        toast(`Retrying cloud sync (Attempt ${nextAttempt}/${CLOUD_SAVE_MAX_ATTEMPTS})...`, 'info');
+        toast(getCloudRetryToast(nextAttempt), 'info');
       }
       console.warn(`[HabitForge] Executing cloud retry for ${deckId} (attempt ${nextAttempt}/${CLOUD_SAVE_MAX_ATTEMPTS})`);
+      if (!cloudSaveRetryByDeck.has(deckId)) return;
       fbSave(saveScope);
     }, delayMs);
 
-    cloudSaveRetryByDeck.set(deckId, {
-      attempt: prev.attempt,
-      firstFailureAt: prev.firstFailureAt,
-      timer
-    });
+    cloudSaveRetryByDeck.set(deckId, createCloudRetryState(prev.attempt, prev.firstFailureAt, timer));
     return true;
   }
 
@@ -1569,11 +1576,10 @@
         : allDecks;
       await fbSaveMedia(fbUid, scopedDecks);
       clearRetryState(saveScope);
-      if (!saveScope) clearRetryState([CLOUD_SAVE_ALL_DECKS_KEY]);
     } catch(e) {
       console.warn('[HabitForge] Cloud save failed:', e);
       const failedDeckIds = new Set(
-        Array.isArray(e && e.failedDeckIds) && e.failedDeckIds.length
+        Array.isArray(e?.failedDeckIds) && e.failedDeckIds.length > 0
           ? e.failedDeckIds
           : [CLOUD_SAVE_ALL_DECKS_KEY]
       );
