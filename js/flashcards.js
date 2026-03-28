@@ -250,11 +250,12 @@ function fcCurrentDeck() {
 }
 
 // ─── SESSION PROGRESS PERSISTENCE ────────────────────────
-const FC_SESSION_KEY = 'hf_fc_sess';
+// Session state is stored in S.fcSession so that it is included in the
+// regular save() / cloud sync cycle and persists across devices.
 
 function fcSaveSessionProgress() {
   try {
-    const sess = {
+    S.fcSession = {
       deckId:      _fcCurrentDeckId,
       subdeck:     _fcCurrentSubdeck,
       date:        todayLocalKey(),
@@ -263,15 +264,14 @@ function fcSaveSessionProgress() {
       stats:       { ..._fcSessionStats },
       againCounts: { ..._fcSessionAgainCounts },
     };
-    localStorage.setItem(FC_SESSION_KEY, JSON.stringify(sess));
+    save();
   } catch(e) {}
 }
 
 function fcLoadSavedSession(deckId, subdeckName) {
   try {
-    const raw = localStorage.getItem(FC_SESSION_KEY);
-    if (!raw) return null;
-    const sess = JSON.parse(raw);
+    const sess = S.fcSession;
+    if (!sess) return null;
     if (
       sess.deckId === deckId &&
       (sess.subdeck || null) === (subdeckName || null) &&
@@ -285,7 +285,7 @@ function fcLoadSavedSession(deckId, subdeckName) {
 }
 
 function fcClearSavedSession() {
-  try { localStorage.removeItem(FC_SESSION_KEY); } catch(e) {}
+  try { S.fcSession = null; save(); } catch(e) {}
 }
 
 // ─── PANEL NAVIGATION ─────────────────────────────────────

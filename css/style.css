@@ -2521,8 +2521,8 @@ body::before {
 #view-flashcards:-webkit-full-screen .fc-card {
   max-width: 800px;
 }
-#view-flashcards:fullscreen .fc-card-inner,
-#view-flashcards:-webkit-full-screen .fc-card-inner {
+#view-flashcards:fullscreen .fc-card-face,
+#view-flashcards:-webkit-full-screen .fc-card-face {
   min-height: 280px;
 }
 #view-flashcards:fullscreen .fc-card-wrap,
@@ -2607,14 +2607,13 @@ body::before {
 .fc-card {
   width: 100%;
   max-width: 640px;
-  min-height: 200px;
   perspective: 1000px;
   filter: drop-shadow(0 12px 28px rgba(0,0,0,0.32));
 }
 .fc-card-inner {
-  position: relative;
   width: 100%;
-  min-height: 200px;
+  display: grid;
+  grid-template-areas: "face";
   transform-style: preserve-3d;
   transition: transform .3s cubic-bezier(.4,0,.2,1), box-shadow .35s ease;
   will-change: transform;
@@ -2622,8 +2621,8 @@ body::before {
 .fc-card-inner.fc-flipped { transform: rotateY(180deg); }
 
 .fc-card-face {
-  position: absolute;
-  inset: 0;
+  grid-area: face;
+  min-height: 200px;
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
   background: radial-gradient(circle at 20% 20%, rgba(88,101,242,.08), transparent 45%), var(--bg-2);
