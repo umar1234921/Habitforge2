@@ -1148,7 +1148,7 @@
 <script type="module">
   import { initializeApp }
     from "https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js";
-  import { getFirestore, doc, setDoc, getDoc }
+  import { getFirestore, doc, setDoc, getDoc, getDocs, collection }
     from "https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore.js";
   import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged }
     from "https://www.gstatic.com/firebasejs/10.7.0/firebase-auth.js";
@@ -1170,6 +1170,153 @@
   const auth = getAuth(app);
   const provider = new GoogleAuthProvider();
   let fbUid = null;
+  let cloudSaveTimer = null;
+  let cloudSaveInFlight = false;
+  let cloudSaveQueued = false;
+  // Milliseconds to wait after a local save before attempting cloud sync.
+  const CLOUD_SAVE_DEBOUNCE_MS = 2500;
+  // Firestore doc limit is 1 MiB; keep chunks comfortably below that to allow JSON overhead.
+  const MAX_MEDIA_CHUNK_CHARS = 700000;
+  const mediaSyncSignatures = new Map();
+
+  function mediaSignature(mediaMap) {
+    if (!mediaMap || typeof mediaMap !== 'object' || Array.isArray(mediaMap)) return '';
+    const names = Object.keys(mediaMap).sort();
+    if (!names.length) return '';
+    return names.map(name => `${name}:${String(mediaMap[name] || '').length}`).join('|');
+  }
+
+  function splitMediaChunks(mediaMap, maxChars = MAX_MEDIA_CHUNK_CHARS) {
+    const entries = Object.entries(mediaMap || {});
+    if (!entries.length) return [];
+    const chunks = [];
+    let cur = {};
+    let curSize = 0;
+    entries.forEach(([filename, dataUrl]) => {
+      const safeData = String(dataUrl || '');
+      // Include a small overhead buffer for JSON quoting + key/value separators.
+      const estSize = filename.length + safeData.length + 16;
+      if (curSize > 0 && curSize + estSize > maxChars) {
+        chunks.push(cur);
+        cur = {};
+        curSize = 0;
+      }
+      cur[filename] = safeData;
+      curSize += estSize;
+    });
+    if (Object.keys(cur).length) chunks.push(cur);
+    return chunks;
+  }
+
+  async function fbLoadMedia(uid) {
+    const mediaByDeck = {};
+    const deckMediaSnap = await getDocs(collection(db, 'gcse_users', uid, 'deck_media'));
+    for (const deckDoc of deckMediaSnap.docs) {
+      const deckId = deckDoc.id;
+      const meta = deckDoc.data() || {};
+      let chunkCount = Number(meta.chunkCount);
+      if (!Number.isFinite(chunkCount) || chunkCount < 0) {
+        if (chunkCount < 0) {
+          console.warn('[HabitForge] Invalid negative chunkCount metadata for deck:', deckId, chunkCount);
+        }
+        chunkCount = 0;
+      }
+      const media = {};
+
+      if (chunkCount > 0) {
+        const chunkSnap = await getDocs(collection(db, 'gcse_users', uid, 'deck_media', deckId, 'chunks'));
+        const seenChunkIds = new Set();
+        chunkSnap.forEach(chunkDoc => {
+          const chunkIdx = Number(chunkDoc.id);
+          // Chunk IDs are zero-based (0..chunkCount-1).
+          if (!Number.isInteger(chunkIdx) || chunkIdx < 0 || chunkIdx >= chunkCount) {
+            console.warn('[HabitForge] Skipping invalid media chunk id:', deckId, chunkDoc.id);
+            return;
+          }
+          seenChunkIds.add(chunkIdx);
+          const chunkData = chunkDoc.data();
+          if (chunkData && chunkData.media && typeof chunkData.media === 'object' && !Array.isArray(chunkData.media)) {
+            Object.assign(media, chunkData.media);
+          }
+        });
+        if (seenChunkIds.size < chunkCount) {
+          console.warn('[HabitForge] Missing one or more media chunks for deck:', deckId);
+        }
+      } else {
+        // Metadata may be missing/corrupted; try inferring from stored chunks.
+        const chunkSnap = await getDocs(collection(db, 'gcse_users', uid, 'deck_media', deckId, 'chunks'));
+        if (!chunkSnap.empty) {
+          console.warn('[HabitForge] Missing/invalid chunkCount metadata; inferring media chunks for deck:', deckId);
+          chunkSnap.forEach(chunkDoc => {
+            const chunkIdx = Number(chunkDoc.id);
+            if (!Number.isInteger(chunkIdx) || chunkIdx < 0) return;
+            const chunkData = chunkDoc.data();
+            if (chunkData && chunkData.media && typeof chunkData.media === 'object' && !Array.isArray(chunkData.media)) {
+              Object.assign(media, chunkData.media);
+            }
+          });
+        }
+      }
+      if (!Object.keys(media).length && meta.media && typeof meta.media === 'object' && !Array.isArray(meta.media)) {
+        // Backward compatibility with older single-document media storage.
+        Object.assign(media, meta.media);
+      }
+
+      if (Object.keys(media).length) {
+        mediaByDeck[deckId] = media;
+        mediaSyncSignatures.set(deckId, mediaSignature(media));
+      }
+    }
+    return mediaByDeck;
+  }
+
+  async function fbSaveMedia(uid, decks) {
+    if (!uid || !Array.isArray(decks)) return;
+    for (const deck of decks) {
+      if (!deck || !deck.id || !deck.media || typeof deck.media !== 'object' || Array.isArray(deck.media)) continue;
+      const names = Object.keys(deck.media);
+      if (!names.length) continue;
+      const sig = mediaSignature(deck.media);
+      if (mediaSyncSignatures.get(deck.id) === sig) continue;
+
+      const chunks = splitMediaChunks(deck.media);
+      const writes = [];
+      // Chunks are written with zero-based sequential numeric IDs: 0..N-1.
+      chunks.forEach((chunk, i) => {
+        writes.push(
+          setDoc(
+            doc(db, 'gcse_users', uid, 'deck_media', deck.id, 'chunks', String(i)),
+            { media: chunk },
+            { merge: true }
+          )
+        );
+      });
+
+      const results = await Promise.allSettled(writes);
+      const failures = results.filter(r => r.status === 'rejected');
+      if (!failures.length) {
+        // updatedAt is for debugging/inspection in Firestore; not used in app logic.
+        await setDoc(
+          doc(db, 'gcse_users', uid, 'deck_media', deck.id),
+          { chunkCount: chunks.length, updatedAt: Date.now() },
+          { merge: true }
+        );
+        mediaSyncSignatures.set(deck.id, sig);
+      } else {
+        console.warn(`[HabitForge] Media cloud save failed for deck ${deck.id}:`, failures);
+        throw new Error(`Media cloud save failed for deck ${deck.id}`);
+      }
+    }
+  }
+
+  function scheduleCloudSave() {
+    if (!fbUid) return;
+    if (cloudSaveTimer) clearTimeout(cloudSaveTimer);
+    cloudSaveTimer = setTimeout(() => {
+      cloudSaveTimer = null;
+      fbSave();
+    }, CLOUD_SAVE_DEBOUNCE_MS);
+  }
 
   // Load cloud state into the app
   async function fbLoad(uid) {
@@ -1185,15 +1332,29 @@
         const orphanedLocalDecks = localDecks.filter(d => d.id && !cloudDeckIds.has(d.id));
         Object.assign(S, cloudData);
 
-        // Restore media (base64 images) from IndexedDB into decks loaded from cloud.
-        // Firestore strips media (1 MB document limit); IndexedDB is the durable store.
+        // Restore media maps from cloud first (cross-device), then fill any gaps from IDB.
         try {
+          const cloudMedia = await fbLoadMedia(uid);
           const allIdbMedia = await MediaDB.loadAll();
           if (Array.isArray(S.flashcardDecks)) {
+            const idbSavePromises = [];
             S.flashcardDecks = S.flashcardDecks.map(deck => {
-              const media = allIdbMedia[deck.id];
-              return (media && Object.keys(media).length) ? { ...deck, media } : deck;
+              const media = cloudMedia[deck.id] || allIdbMedia[deck.id];
+              if (media && Object.keys(media).length) {
+                if (cloudMedia[deck.id]) {
+                  idbSavePromises.push(MediaDB.save(deck.id, media));
+                }
+                return { ...deck, media };
+              }
+              return deck;
             });
+            if (idbSavePromises.length) {
+              const idbResults = await Promise.allSettled(idbSavePromises);
+              const failures = idbResults.filter(r => r.status === 'rejected');
+              if (failures.length) {
+                console.warn('[HabitForge] IDB save from cloud media had failures:', failures);
+              }
+            }
           }
         } catch(idbErr) {
           console.warn('[HabitForge] IDB media restore failed:', idbErr);
@@ -1205,7 +1366,7 @@
           // across refreshes and on other devices.
           const mergedById = new Map([...S.flashcardDecks, ...orphanedLocalDecks].map(d => [d.id, d]));
           S.flashcardDecks = [...mergedById.values()];
-          fbSave();
+          scheduleCloudSave();
           if (typeof _localSave === 'function') _localSave();
         }
         renderDashboard();
@@ -1221,7 +1382,7 @@
       } else {
         // No cloud document yet — push all local data (including any imported decks) to cloud
         console.log('[HabitForge] No cloud data yet — pushing local data to cloud');
-        fbSave();
+        scheduleCloudSave();
       }
     } catch(e) {
       console.warn('[HabitForge] Cloud load failed:', e);
@@ -1234,6 +1395,11 @@
   // IndexedDB and are restored by fbLoad() after every cloud load.
   async function fbSave() {
     if (!fbUid) return;
+    if (cloudSaveInFlight) {
+      cloudSaveQueued = true;
+      return;
+    }
+    cloudSaveInFlight = true;
     try {
       const stateForCloud = { ...S };
       if (Array.isArray(S.flashcardDecks)) {
@@ -1242,10 +1408,25 @@
         );
       }
       await setDoc(doc(db, 'gcse_users', fbUid), stateForCloud);
+      await fbSaveMedia(fbUid, S.flashcardDecks);
     } catch(e) {
       console.warn('[HabitForge] Cloud save failed:', e);
       if (typeof toast === 'function') toast('Cloud sync failed — data saved locally', 'info');
+    } finally {
+      cloudSaveInFlight = false;
+      if (cloudSaveQueued) {
+        cloudSaveQueued = false;
+        fbSave();
+      }
     }
+  }
+
+  async function fbSaveNow() {
+    if (cloudSaveTimer) {
+      clearTimeout(cloudSaveTimer);
+      cloudSaveTimer = null;
+    }
+    await fbSave();
   }
 
   // Override the app's local save() so every save also goes to cloud.
@@ -1254,7 +1435,7 @@
   if (typeof _localSave === 'function') {
     window.save = function() {
       _localSave();
-      fbSave();
+      scheduleCloudSave();
     };
   }
 
@@ -1264,7 +1445,7 @@
     syncBtn.addEventListener('click', async () => {
       if (fbUid) {
         // Already signed in — force a manual save
-        await fbSave();
+        await fbSaveNow();
         syncBtn.textContent = '✓ Saved to cloud';
         setTimeout(() => {
           syncBtn.textContent = '☁ ' + (auth.currentUser?.displayName?.split(' ')[0] || 'Synced');
