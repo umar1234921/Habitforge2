@@ -1185,16 +1185,18 @@
         const orphanedLocalDecks = localDecks.filter(d => d.id && !cloudDeckIds.has(d.id));
         Object.assign(S, cloudData);
 
-        // Restore locally-cached media (base64 images) into decks loaded from cloud.
-        // fbSave() intentionally strips media to stay under Firestore's 1 MB document
-        // limit, so after a cloud load we re-attach any media that is still in
-        // localStorage so images continue to display in the current session.
-        const localMediaById = new Map(localDecks.map(d => [d.id, d.media]));
-        if (Array.isArray(S.flashcardDecks)) {
-          S.flashcardDecks = S.flashcardDecks.map(deck => {
-            const localMedia = localMediaById.get(deck.id);
-            return localMedia ? { ...deck, media: localMedia } : deck;
-          });
+        // Restore media (base64 images) from IndexedDB into decks loaded from cloud.
+        // Firestore strips media (1 MB document limit); IndexedDB is the durable store.
+        try {
+          const allIdbMedia = await MediaDB.loadAll();
+          if (Array.isArray(S.flashcardDecks)) {
+            S.flashcardDecks = S.flashcardDecks.map(deck => {
+              const media = allIdbMedia[deck.id];
+              return (media && Object.keys(media).length) ? { ...deck, media } : deck;
+            });
+          }
+        } catch(idbErr) {
+          console.warn('[HabitForge] IDB media restore failed:', idbErr);
         }
 
         if (orphanedLocalDecks.length > 0) {
@@ -1229,7 +1231,7 @@
   // Push local state up to Firestore.
   // Media (base64 images) is deliberately stripped before the upload because
   // Firestore enforces a 1 MB per-document limit.  Images are kept in
-  // localStorage only and are restored by fbLoad() after every cloud load.
+  // IndexedDB and are restored by fbLoad() after every cloud load.
   async function fbSave() {
     if (!fbUid) return;
     try {
