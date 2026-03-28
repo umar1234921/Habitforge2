@@ -1172,9 +1172,14 @@
   let fbUid = null;
   let cloudSaveTimer = null;
   let cloudSaveInFlight = false;
-  let cloudSaveQueued = false;
+  const cloudSaveQueuedDecks = new Set();
   // Milliseconds to wait after a local save before attempting cloud sync.
   const CLOUD_SAVE_DEBOUNCE_MS = 2500;
+  const CLOUD_SAVE_MAX_ATTEMPTS = 3;
+  const CLOUD_SAVE_RETRY_DELAYS_MS = [5000, 10000, 20000];
+  const CLOUD_SAVE_MAX_RETRY_WINDOW_MS = 120000;
+  const CLOUD_SAVE_ALL_DECKS_KEY = '__all__';
+  const cloudSaveRetryByDeck = new Map();
   // Firestore doc limit is 1 MiB; keep chunks comfortably below that to allow JSON overhead.
   const MAX_MEDIA_CHUNK_CHARS = 700000;
   const mediaSyncSignatures = new Map();
@@ -1298,6 +1303,7 @@
 
   async function fbSaveMedia(uid, decks) {
     if (!uid || !Array.isArray(decks)) return;
+    const failedDeckIds = [];
     for (const deck of decks) {
       if (!deck || !deck.id || !deck.media || typeof deck.media !== 'object' || Array.isArray(deck.media)) continue;
       const names = Object.keys(deck.media);
@@ -1308,53 +1314,161 @@
       const chunks = splitMediaChunks(deck.media);
       // Write chunks sequentially (not all in parallel) to avoid triggering Firestore
       // RESOURCE_EXHAUSTED rate limits on large decks with many image chunks.
-      // Each write is individually retried with exponential back-off.
-      let failed = false;
+      // Failed chunks are retried in later passes with exponential back-off.
+      let pendingChunkIndexes = chunks.map((_, i) => i);
+      let attempt = 1;
+      const retryStartAt = Date.now();
       let lastChunkError = null;
-      for (let i = 0; i < chunks.length; i++) {
-        try {
-          await withRetry(() =>
-            setDoc(
-              doc(db, 'gcse_users', uid, 'deck_media', deck.id, 'chunks', String(i)),
-              { media: chunks[i] },
-              { merge: true }
-            )
-          );
-          // Small pause between chunks to stay well within Firestore write rate limits.
-          if (i < chunks.length - 1) await new Promise(r => setTimeout(r, 150));
-        } catch (e) {
-          console.warn(`[HabitForge] Media chunk ${i} save failed for deck ${deck.id}:`, e);
-          lastChunkError = e;
-          failed = true;
+      while (pendingChunkIndexes.length) {
+        const failedChunkIndexes = [];
+        for (const i of pendingChunkIndexes) {
+          try {
+            await withRetry(() =>
+              setDoc(
+                doc(db, 'gcse_users', uid, 'deck_media', deck.id, 'chunks', String(i)),
+                { media: chunks[i] },
+                { merge: true }
+              )
+            );
+            // Small pause between chunks to stay well within Firestore write rate limits.
+            await new Promise(r => setTimeout(r, 150));
+          } catch (e) {
+            console.warn(`[HabitForge] Media chunk ${i} save failed for deck ${deck.id} (attempt ${attempt}/${CLOUD_SAVE_MAX_ATTEMPTS}):`, e);
+            lastChunkError = e;
+            failedChunkIndexes.push(i);
+          }
+        }
+        if (!failedChunkIndexes.length) break;
+        if (attempt >= CLOUD_SAVE_MAX_ATTEMPTS || (Date.now() - retryStartAt) >= CLOUD_SAVE_MAX_RETRY_WINDOW_MS) {
+          pendingChunkIndexes = failedChunkIndexes;
           break;
         }
+        const nextAttempt = attempt + 1;
+        const delayMs = CLOUD_SAVE_RETRY_DELAYS_MS[Math.min(nextAttempt - 2, CLOUD_SAVE_RETRY_DELAYS_MS.length - 1)];
+        console.warn(`[HabitForge] Retrying ${failedChunkIndexes.length} media chunks for deck ${deck.id} (attempt ${nextAttempt}/${CLOUD_SAVE_MAX_ATTEMPTS}) in ${delayMs}ms`);
+        if (typeof toast === 'function') {
+          toast(`Retrying cloud sync (Attempt ${nextAttempt}/${CLOUD_SAVE_MAX_ATTEMPTS})...`, 'info');
+        }
+        await new Promise(r => setTimeout(r, delayMs));
+        attempt = nextAttempt;
+        pendingChunkIndexes = failedChunkIndexes;
       }
 
-      if (!failed) {
-        // updatedAt is for debugging/inspection in Firestore; not used in app logic.
-        await withRetry(() =>
-          setDoc(
-            doc(db, 'gcse_users', uid, 'deck_media', deck.id),
-            { chunkCount: chunks.length, updatedAt: Date.now() },
-            { merge: true }
-          )
-        );
-        mediaSyncSignatures.set(deck.id, sig);
-      } else {
-        throw Object.assign(
-          new Error(`Media cloud save failed for deck ${deck.id}`),
-          { cause: lastChunkError }
-        );
+      if (pendingChunkIndexes.length) {
+        failedDeckIds.push(deck.id);
+        console.warn(`[HabitForge] Media cloud save failed for deck ${deck.id}; failed chunks: ${pendingChunkIndexes.join(', ')}`);
+        if (lastChunkError) {
+          console.warn('[HabitForge] Last media chunk error:', lastChunkError);
+        }
+        continue;
       }
+
+      // updatedAt is for debugging/inspection in Firestore; not used in app logic.
+      await withRetry(() =>
+        setDoc(
+          doc(db, 'gcse_users', uid, 'deck_media', deck.id),
+          { chunkCount: chunks.length, updatedAt: Date.now() },
+          { merge: true }
+        )
+      );
+      mediaSyncSignatures.set(deck.id, sig);
+    }
+    if (failedDeckIds.length) {
+      throw Object.assign(
+        new Error('Media cloud save failed for one or more decks'),
+        { failedDeckIds }
+      );
     }
   }
 
-  function scheduleCloudSave() {
+  function queueCloudSaveRequest(deckIds = null) {
+    if (!deckIds) {
+      cloudSaveQueuedDecks.clear();
+      cloudSaveQueuedDecks.add(CLOUD_SAVE_ALL_DECKS_KEY);
+      return;
+    }
+    const ids = deckIds instanceof Set ? deckIds : new Set(deckIds);
+    if (ids.has(CLOUD_SAVE_ALL_DECKS_KEY)) {
+      cloudSaveQueuedDecks.clear();
+      cloudSaveQueuedDecks.add(CLOUD_SAVE_ALL_DECKS_KEY);
+      return;
+    }
+    ids.forEach(id => {
+      if (id) cloudSaveQueuedDecks.add(id);
+    });
+  }
+
+  function consumeQueuedCloudSaveRequest() {
+    if (!cloudSaveQueuedDecks.size) return null;
+    if (cloudSaveQueuedDecks.has(CLOUD_SAVE_ALL_DECKS_KEY)) {
+      cloudSaveQueuedDecks.clear();
+      return CLOUD_SAVE_ALL_DECKS_KEY;
+    }
+    const queuedIds = new Set(cloudSaveQueuedDecks);
+    cloudSaveQueuedDecks.clear();
+    return queuedIds;
+  }
+
+  function clearRetryState(deckIds = null) {
+    if (!deckIds) {
+      cloudSaveRetryByDeck.forEach(state => {
+        if (state && state.timer) clearTimeout(state.timer);
+      });
+      cloudSaveRetryByDeck.clear();
+      return;
+    }
+    const ids = deckIds instanceof Set ? deckIds : new Set(deckIds);
+    ids.forEach(id => {
+      const state = cloudSaveRetryByDeck.get(id);
+      if (state && state.timer) clearTimeout(state.timer);
+      cloudSaveRetryByDeck.delete(id);
+    });
+  }
+
+  function queueCloudRetry(deckId, saveScope = null) {
+    if (!deckId || !fbUid) return false;
+    const now = Date.now();
+    const prev = cloudSaveRetryByDeck.get(deckId) || { attempt: 1, firstFailureAt: now, timer: null };
+    if (prev.timer) return true;
+
+    if ((now - prev.firstFailureAt) >= CLOUD_SAVE_MAX_RETRY_WINDOW_MS || prev.attempt >= CLOUD_SAVE_MAX_ATTEMPTS) {
+      console.warn(`[HabitForge] Cloud retry window exhausted for ${deckId}. Last attempt: ${prev.attempt}/${CLOUD_SAVE_MAX_ATTEMPTS}`);
+      cloudSaveRetryByDeck.delete(deckId);
+      return false;
+    }
+
+    const nextAttempt = prev.attempt + 1;
+    const delayMs = CLOUD_SAVE_RETRY_DELAYS_MS[Math.min(nextAttempt - 2, CLOUD_SAVE_RETRY_DELAYS_MS.length - 1)];
+    console.warn(`[HabitForge] Scheduling cloud retry for ${deckId} (attempt ${nextAttempt}/${CLOUD_SAVE_MAX_ATTEMPTS}) in ${delayMs}ms`);
+    const timer = setTimeout(() => {
+      const current = cloudSaveRetryByDeck.get(deckId);
+      if (!current) return;
+      cloudSaveRetryByDeck.set(deckId, {
+        ...current,
+        attempt: nextAttempt,
+        timer: null
+      });
+      if (typeof toast === 'function') {
+        toast(`Retrying cloud sync (Attempt ${nextAttempt}/${CLOUD_SAVE_MAX_ATTEMPTS})...`, 'info');
+      }
+      console.warn(`[HabitForge] Executing cloud retry for ${deckId} (attempt ${nextAttempt}/${CLOUD_SAVE_MAX_ATTEMPTS})`);
+      fbSave(saveScope);
+    }, delayMs);
+
+    cloudSaveRetryByDeck.set(deckId, {
+      attempt: prev.attempt,
+      firstFailureAt: prev.firstFailureAt,
+      timer
+    });
+    return true;
+  }
+
+  function scheduleCloudSave(deckIds = null) {
     if (!fbUid) return;
     if (cloudSaveTimer) clearTimeout(cloudSaveTimer);
     cloudSaveTimer = setTimeout(() => {
       cloudSaveTimer = null;
-      fbSave();
+      fbSave(deckIds);
     }, CLOUD_SAVE_DEBOUNCE_MS);
   }
 
@@ -1433,10 +1547,11 @@
   // Media (base64 images) is deliberately stripped before the upload because
   // Firestore enforces a 1 MB per-document limit.  Images are kept in
   // IndexedDB and are restored by fbLoad() after every cloud load.
-  async function fbSave() {
+  async function fbSave(deckIds = null) {
     if (!fbUid) return;
+    const saveScope = deckIds instanceof Set ? new Set(deckIds) : (deckIds ? new Set(deckIds) : null);
     if (cloudSaveInFlight) {
-      cloudSaveQueued = true;
+      queueCloudSaveRequest(saveScope);
       return;
     }
     cloudSaveInFlight = true;
@@ -1448,15 +1563,33 @@
         );
       }
       await withRetry(() => setDoc(doc(db, 'gcse_users', fbUid), stateForCloud));
-      await fbSaveMedia(fbUid, S.flashcardDecks);
+      const allDecks = Array.isArray(S.flashcardDecks) ? S.flashcardDecks : [];
+      const scopedDecks = saveScope
+        ? allDecks.filter(deck => deck && deck.id && saveScope.has(deck.id))
+        : allDecks;
+      await fbSaveMedia(fbUid, scopedDecks);
+      clearRetryState(saveScope);
+      if (!saveScope) clearRetryState([CLOUD_SAVE_ALL_DECKS_KEY]);
     } catch(e) {
       console.warn('[HabitForge] Cloud save failed:', e);
-      if (typeof toast === 'function') toast('Cloud sync failed — data saved locally', 'info');
+      const failedDeckIds = new Set(
+        Array.isArray(e && e.failedDeckIds) && e.failedDeckIds.length
+          ? e.failedDeckIds
+          : [CLOUD_SAVE_ALL_DECKS_KEY]
+      );
+      let retryQueued = false;
+      failedDeckIds.forEach(deckId => {
+        const retryScope = deckId === CLOUD_SAVE_ALL_DECKS_KEY ? null : new Set([deckId]);
+        if (queueCloudRetry(deckId, retryScope)) retryQueued = true;
+      });
+      if (!retryQueued && typeof toast === 'function') {
+        toast('Cloud sync failed — data saved locally', 'info');
+      }
     } finally {
       cloudSaveInFlight = false;
-      if (cloudSaveQueued) {
-        cloudSaveQueued = false;
-        fbSave();
+      const queuedSaveScope = consumeQueuedCloudSaveRequest();
+      if (queuedSaveScope) {
+        fbSave(queuedSaveScope === CLOUD_SAVE_ALL_DECKS_KEY ? null : queuedSaveScope);
       }
     }
   }
