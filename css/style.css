@@ -3374,3 +3374,51 @@ input.el-m-marks { width: 72px; }
   .el-layout { flex-direction: column; }
   .el-side   { width: 100%; }
 }
+
+/* ─── Subdeck study picker (deck list) ─── */
+.fc-study-wrap {
+  position: relative;
+}
+.fc-subdeck-menu {
+  position: absolute;
+  top: calc(100% + 5px);
+  right: 0;
+  min-width: 210px;
+  background: var(--bg-2);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r2);
+  box-shadow: var(--shadow);
+  z-index: 100;
+  overflow: hidden;
+}
+.fc-sdm-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  text-align: left;
+  padding: 9px 14px;
+  font-family: var(--f-mono);
+  font-size: 11px;
+  letter-spacing: .4px;
+  color: var(--text);
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: background .12s;
+}
+.fc-sdm-item:last-child { border-bottom: none; }
+.fc-sdm-item:hover:not([disabled]) { background: var(--bg-3); }
+.fc-sdm-item[disabled] { color: var(--text-4); cursor: default; }
+.fc-sdm-item.fc-sdm-done { color: var(--text-4); }
+.fc-sdm-count {
+  flex-shrink: 0;
+  font-family: var(--f-mono);
+  font-size: 10px;
+  color: var(--accent-5);
+  background: rgba(237,66,69,.1);
+  padding: 1px 6px;
+  border-radius: 8px;
+  margin-left: 8px;
+}

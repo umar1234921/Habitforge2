@@ -182,6 +182,7 @@ const SRS = {
 
 // ─── UI STATE ─────────────────────────────────────────────
 let _fcCurrentDeckId      = null;
+let _fcCurrentSubdeck     = null; // null = all cards; string = specific subdeck name
 let _fcStudyQueue         = [];
 let _fcStudyIdx           = 0;
 let _fcFlipped            = false;
@@ -199,6 +200,7 @@ function fcSaveSessionProgress() {
   try {
     const sess = {
       deckId:      _fcCurrentDeckId,
+      subdeck:     _fcCurrentSubdeck,
       date:        todayLocalKey(),
       queueIds:    _fcStudyQueue.map(c => c.id),
       idx:         _fcStudyIdx,
@@ -209,13 +211,14 @@ function fcSaveSessionProgress() {
   } catch(e) {}
 }
 
-function fcLoadSavedSession(deckId) {
+function fcLoadSavedSession(deckId, subdeckName) {
   try {
     const raw = localStorage.getItem(FC_SESSION_KEY);
     if (!raw) return null;
     const sess = JSON.parse(raw);
     if (
       sess.deckId === deckId &&
+      (sess.subdeck || null) === (subdeckName || null) &&
       sess.date === todayLocalKey() &&
       sess.idx > 0 &&
       Array.isArray(sess.queueIds) &&
@@ -240,6 +243,18 @@ function fcShowPanel(name) {
 function renderFlashcards() {
   fcShowPanel('decks');
   renderFCDecks();
+}
+
+/**
+ * Returns the number of due cards for a specific subdeck (or all cards when
+ * subdeckName is falsy).  Uses a temporary deck-like object so that the full
+ * SRS.dueCount logic (exam mode, daily target) is honoured.
+ */
+function subdeckDueCount(deck, subdeckName) {
+  const cards = subdeckName
+    ? deck.cards.filter(c => c.subdeck === subdeckName)
+    : deck.cards;
+  return SRS.dueCount({ ...deck, cards });
 }
 
 function renderFCDecks() {
@@ -280,6 +295,22 @@ function renderFCDecks() {
       ? Math.max(0, Math.ceil((parseLocalDate(deck.examDate) - parseLocalDate(todayLocalKey())) / 86400000))
       : null;
     const examSt = deck.examMode && deck.examDate ? SRS.examStats(deck) : null;
+    const hasSubdecks = Array.isArray(deck.subdecks) && deck.subdecks.length > 0;
+
+    // Build subdeck dropdown items (only when deck has multiple subdecks and cards are due)
+    const subdeckMenuHtml = hasSubdecks && due > 0 ? `
+      <div class="fc-subdeck-menu fc-hidden">
+        <button class="fc-sdm-item" data-id="${deck.id}" data-subdeck="">
+          ▸ All <span class="fc-sdm-count">${due}</span>
+        </button>
+        ${deck.subdecks.map(sd => {
+          const sdDue = subdeckDueCount(deck, sd);
+          return `<button class="fc-sdm-item${sdDue === 0 ? ' fc-sdm-done' : ''}"
+            data-id="${deck.id}" data-subdeck="${escFc(sd)}"${sdDue === 0 ? ' disabled' : ''}>
+            ${sdDue === 0 ? '✓' : '▸'} ${escFc(sd)}${sdDue > 0 ? ` <span class="fc-sdm-count">${sdDue}</span>` : ''}
+          </button>`;
+        }).join('')}
+      </div>` : '';
 
     return `
     <div class="fc-deck-card" style="border-left-color:${color}">
@@ -288,6 +319,7 @@ function renderFCDecks() {
           <div class="fc-deck-name">${escFc(deck.name)}</div>
           <div class="fc-deck-meta">
             <span class="fc-dm-stat">${total} card${total !== 1 ? 's' : ''}</span>
+            ${hasSubdecks ? `<span class="fc-dm-stat">${deck.subdecks.length} part${deck.subdecks.length !== 1 ? 's' : ''}</span>` : ''}
             ${due > 0
               ? `<span class="fc-dm-due">${due} due</span>`
               : `<span class="fc-dm-ok">✓ up to date</span>`}
@@ -307,10 +339,14 @@ function renderFCDecks() {
           </div>
         </div>
         <div class="fc-deck-actions">
-          <button class="btn-primary fc-ds-btn" data-id="${deck.id}"
-            ${due === 0 ? 'disabled title="No cards due"' : ''}>
-            ${due > 0 ? `▶ Study (${due})` : '✓ Done'}
-          </button>
+          <div class="fc-study-wrap">
+            <button class="btn-primary fc-ds-btn" data-id="${deck.id}"
+              ${due === 0 ? 'disabled title="No cards due"' : ''}
+              ${hasSubdecks && due > 0 ? 'data-has-subdecks="1"' : ''}>
+              ${due > 0 ? `▶ Study (${due})` : '✓ Done'}${hasSubdecks && due > 0 ? ' ▾' : ''}
+            </button>
+            ${subdeckMenuHtml}
+          </div>
           <button class="fb fc-dm-btn" data-id="${deck.id}" title="Manage cards">⚙ Manage</button>
           <button class="ti-del fc-dd-btn" data-id="${deck.id}" title="Delete deck">✕</button>
         </div>
@@ -325,8 +361,27 @@ function renderFCDecks() {
     </div>`;
   }).join('');
 
-  list.querySelectorAll('.fc-ds-btn').forEach(btn =>
-    btn.addEventListener('click', () => startStudySession(btn.dataset.id)));
+  list.querySelectorAll('.fc-ds-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const wrap = btn.closest('.fc-study-wrap');
+      const menu = wrap ? wrap.querySelector('.fc-subdeck-menu') : null;
+      if (menu) {
+        // Toggle this dropdown; close any other open ones first
+        const isHidden = menu.classList.contains('fc-hidden');
+        document.querySelectorAll('.fc-subdeck-menu').forEach(m => m.classList.add('fc-hidden'));
+        if (isHidden) menu.classList.remove('fc-hidden');
+      } else {
+        startStudySession(btn.dataset.id);
+      }
+    });
+  });
+  list.querySelectorAll('.fc-sdm-item').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const menu = btn.closest('.fc-subdeck-menu');
+      if (menu) menu.classList.add('fc-hidden');
+      startStudySession(btn.dataset.id, btn.dataset.subdeck || null);
+    });
+  });
   list.querySelectorAll('.fc-dm-btn').forEach(btn =>
     btn.addEventListener('click', () => openDeckManage(btn.dataset.id)));
   list.querySelectorAll('.fc-dd-btn').forEach(btn =>
@@ -533,22 +588,33 @@ function _fcStartFresh(deck, due) {
   fcClearSavedSession();
 }
 
-function startStudySession(deckId) {
-  _fcCurrentDeckId = deckId;
+function startStudySession(deckId, subdeckName) {
+  _fcCurrentDeckId  = deckId;
+  _fcCurrentSubdeck = subdeckName || null;
   const deck = fcCurrentDeck();
   if (!deck) return;
 
-  const due = SRS.dueToday(deck);
+  // When studying a specific subdeck, restrict the card pool to that subdeck.
+  const deckForStudy = _fcCurrentSubdeck
+    ? { ...deck, cards: deck.cards.filter(c => c.subdeck === _fcCurrentSubdeck) }
+    : deck;
+
+  const due = SRS.dueToday(deckForStudy);
   if (!due.length) { toast('No cards due — well done!'); return; }
 
-  // Check for saved mid-session progress
-  const savedSess = fcLoadSavedSession(deckId);
+  // Display name: show subdeck context when studying a specific part
+  const displayName = _fcCurrentSubdeck
+    ? `${deck.name} → ${_fcCurrentSubdeck}`
+    : deck.name;
+
+  // Check for saved mid-session progress (matched by both deck id and subdeck)
+  const savedSess = fcLoadSavedSession(deckId, _fcCurrentSubdeck);
   if (savedSess) {
-    const cardMap = Object.fromEntries(deck.cards.map(c => [c.id, c]));
+    const cardMap = Object.fromEntries(deckForStudy.cards.map(c => [c.id, c]));
     const rebuiltQueue = savedSess.queueIds.map(id => cardMap[id]).filter(Boolean);
     const remaining = rebuiltQueue.length - savedSess.idx;
     if (remaining > 0) {
-      $('fc-study-deck-name').textContent = deck.name;
+      $('fc-study-deck-name').textContent = displayName;
       $('fc-card-wrap').classList.add('fc-hidden');
       $('fc-session-complete').classList.add('fc-hidden');
       $('fc-resume-sub').textContent =
@@ -570,7 +636,7 @@ function startStudySession(deckId) {
       const onFresh = () => {
         cleanup();
         $('fc-resume-prompt').classList.add('fc-hidden');
-        _fcStartFresh(deck, due);
+        _fcStartFresh(deckForStudy, due);
         $('fc-card-wrap').classList.remove('fc-hidden');
         renderStudyCard();
       };
@@ -585,8 +651,8 @@ function startStudySession(deckId) {
   }
 
   // Fresh start
-  _fcStartFresh(deck, due);
-  $('fc-study-deck-name').textContent = deck.name;
+  _fcStartFresh(deckForStudy, due);
+  $('fc-study-deck-name').textContent = displayName;
   $('fc-session-complete').classList.add('fc-hidden');
   $('fc-resume-prompt').classList.add('fc-hidden');
   $('fc-card-wrap').classList.remove('fc-hidden');
@@ -912,19 +978,20 @@ function loadScript(src, integrity) {
 }
 
 /**
- * Imports an Anki .apkg file and creates one flashcard deck per Anki
- * (sub)deck found inside the package.
+ * Imports an Anki .apkg file and creates flashcard decks from its contents.
  *
  * An .apkg is a ZIP archive containing:
  *   - collection.anki21 or collection.anki2 — a SQLite database
  *   - media                                 — JSON map of key → filename
  *   - 0, 1, 2, …                            — the actual media files
  *
- * Subdecks: the `col` table's `decks` JSON column contains every deck
- * (including subdecks) with a unique numeric id.  The `cards` table links
- * each card to a deck via its `did` column.  We join `notes` with `cards`
- * so that each note is associated with its deck, then create a separate
- * HabitForge deck for every distinct Anki deck that has notes.
+ * Subdeck grouping: when multiple Anki decks share the same root name (e.g.
+ * "Spanish::Vocabulary" and "Spanish::Grammar") they are merged into a single
+ * HabitForge deck named after the root ("Spanish").  Each card is tagged with
+ * its subdeck name via a `subdeck` property so the user can choose which part
+ * to study from an in-deck dropdown menu.  A .apkg that contains only one
+ * (sub)deck under a given root is stored with its full Anki name — no dropdown
+ * is shown and behaviour is identical to the original single-deck import.
  *
  * Images: image files inside the ZIP are extracted and stored as base-64
  * data URLs in a `media` map on the deck object.  Card text retains
@@ -1078,46 +1145,134 @@ async function importApkg(file) {
       return;
     }
 
-    // ── Step 9: Create one HabitForge deck per Anki (sub)deck ────────────
+    // ── Step 9: Create HabitForge decks, grouping subdecks under their root deck ──
+    // Anki uses '::' to express hierarchy (e.g. "Spanish::Vocabulary").  When an
+    // .apkg contains multiple subdecks under the same root we create ONE HabitForge
+    // deck named after the root ("Spanish") and tag each card with its subdeck name
+    // so the user can later choose which part to study.  Single-level decks (no '::')
+    // or .apkg files that contain only one subdeck under a given root are stored with
+    // the full Anki name, matching the original behaviour.
     if (!S.flashcardDecks) S.flashcardDecks = [];
     let totalCards = 0;
     let decksAdded = 0;
 
+    /**
+     * Builds a usedMedia subset for an array of cards, reading from the global
+     * mediaMap extracted from the .apkg archive.
+     * @param {Array} cards
+     * @returns {Object} filename → data URL
+     */
+    function buildUsedMedia(cards) {
+      const usedMedia = {};
+      if (!Object.keys(mediaMap).length) return usedMedia;
+      const imgRe = /\{\{img:([^}]+)\}\}/g;
+      cards.forEach(card => {
+        [card.front, card.back].forEach(text => {
+          let m;
+          imgRe.lastIndex = 0;
+          while ((m = imgRe.exec(text)) !== null) {
+            const fn = m[1];
+            if (mediaMap[fn]) usedMedia[fn] = mediaMap[fn];
+          }
+        });
+      });
+      return usedMedia;
+    }
+
+    // ── 9a: Collect per-Anki-deck info (cards + media) ───────────────────────
+    /** @type {Array<{fullName:string, cards:Array, media:Object}>} */
+    const ankiDecks = [];
     deckCards.forEach((cards, did) => {
       if (!cards.length) return;
-      const name = deckIdToName[did] || fallbackName;
-
-      // Build a media subset containing only images used by this deck's cards
-      const usedMedia = {};
-      if (Object.keys(mediaMap).length) {
-        const imgRe = /\{\{img:([^}]+)\}\}/g;
-        cards.forEach(card => {
-          [card.front, card.back].forEach(text => {
-            let m;
-            imgRe.lastIndex = 0;
-            while ((m = imgRe.exec(text)) !== null) {
-              const fn = m[1];
-              if (mediaMap[fn]) usedMedia[fn] = mediaMap[fn];
-            }
-          });
-        });
-      }
-
-      S.flashcardDecks.push({
-        id:              uid(),
-        name,
-        subject:         '',
-        examDate:        '',
-        dailyTarget:     20,
-        examMode:        false,
+      ankiDecks.push({
+        fullName: deckIdToName[did] || fallbackName,
         cards,
-        ...(Object.keys(usedMedia).length ? { media: usedMedia } : {}),
-        streak:          0,
-        lastStudiedDate: null,
+        media: buildUsedMedia(cards),
       });
+    });
 
-      totalCards += cards.length;
-      decksAdded++;
+    // ── 9b: Group by root name (first segment before '::') ───────────────────
+    const ANKI_SEP = '::'; // Anki hierarchy delimiter
+    /** @type {Map<string, Array<{subName:string, cards:Array, media:Object}>>} */
+    const rootGroups = new Map();
+    ankiDecks.forEach(({ fullName, cards, media }) => {
+      const colonIdx = fullName.indexOf(ANKI_SEP);
+      const rootName = colonIdx === -1 ? fullName : fullName.slice(0, colonIdx);
+      const subName  = colonIdx === -1 ? ''        : fullName.slice(colonIdx + ANKI_SEP.length);
+      if (!rootGroups.has(rootName)) rootGroups.set(rootName, []);
+      rootGroups.get(rootName).push({ subName, cards, media });
+    });
+
+    // ── 9c: Create one HabitForge deck per root group ────────────────────────
+    rootGroups.forEach((groups, rootName) => {
+      if (groups.length === 1 && groups[0].subName === '') {
+        // Plain deck — no subdeck hierarchy, store as-is (original behaviour)
+        const { cards, media } = groups[0];
+        S.flashcardDecks.push({
+          id:              uid(),
+          name:            rootName,
+          subject:         '',
+          examDate:        '',
+          dailyTarget:     20,
+          examMode:        false,
+          cards,
+          ...(Object.keys(media).length ? { media } : {}),
+          streak:          0,
+          lastStudiedDate: null,
+        });
+        totalCards += cards.length;
+        decksAdded++;
+      } else if (groups.length === 1) {
+        // Only one subdeck exported under this root — keep the full Anki name
+        // so no information is lost (no dropdown needed for a single part).
+        const { subName, cards, media } = groups[0];
+        S.flashcardDecks.push({
+          id:              uid(),
+          name:            `${rootName}${ANKI_SEP}${subName}`,
+          subject:         '',
+          examDate:        '',
+          dailyTarget:     20,
+          examMode:        false,
+          cards,
+          ...(Object.keys(media).length ? { media } : {}),
+          streak:          0,
+          lastStudiedDate: null,
+        });
+        totalCards += cards.length;
+        decksAdded++;
+      } else {
+        // Multiple Anki decks share this root → merge into one HabitForge deck.
+        // Each card gets a `subdeck` tag (the short name after '::') so the study
+        // picker can filter to a specific part.  Cards from a root-level Anki deck
+        // (subName === '') receive no tag and always appear in "All".
+        const allCards = [];
+        const allMedia = {};
+        const subdeckNames = [];
+
+        groups.forEach(({ subName, cards, media }) => {
+          if (subName) subdeckNames.push(subName);
+          cards.forEach(card => {
+            allCards.push(subName ? { ...card, subdeck: subName } : card);
+          });
+          Object.assign(allMedia, media);
+        });
+
+        S.flashcardDecks.push({
+          id:              uid(),
+          name:            rootName,
+          subject:         '',
+          examDate:        '',
+          dailyTarget:     20,
+          examMode:        false,
+          cards:           allCards,
+          ...(Object.keys(allMedia).length ? { media: allMedia } : {}),
+          subdecks:        subdeckNames,
+          streak:          0,
+          lastStudiedDate: null,
+        });
+        totalCards += allCards.length;
+        decksAdded++;
+      }
     });
 
     save();
@@ -1158,6 +1313,13 @@ function initFlashcards() {
   // Subject filter
   const filterEl = $('fc-subject-filter');
   if (filterEl) filterEl.addEventListener('change', renderFCDecks);
+
+  // Close subdeck dropdown when clicking outside the study wrap
+  document.addEventListener('click', e => {
+    if (!e.target.closest('.fc-study-wrap')) {
+      document.querySelectorAll('.fc-subdeck-menu').forEach(m => m.classList.add('fc-hidden'));
+    }
+  });
 
   // Manage panel
   $('fc-back-to-decks').addEventListener('click', () => {
