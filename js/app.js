@@ -39,7 +39,21 @@ const todayKey = () => new Date().toISOString().split('T')[0];
 const uid = () => Math.random().toString(36).slice(2, 9);
 
 function save() {
-  try { localStorage.setItem('hf_gcse', JSON.stringify(S)); } catch(e) {}
+  try {
+    localStorage.setItem('hf_gcse', JSON.stringify(S));
+  } catch(e) {
+    // localStorage quota exceeded — retry without base64 media to stay under the limit
+    try {
+      const slim = { ...S };
+      if (Array.isArray(S.flashcardDecks)) {
+        slim.flashcardDecks = S.flashcardDecks.map(({ media, ...rest }) => rest);
+      }
+      localStorage.setItem('hf_gcse', JSON.stringify(slim));
+      toast('Deck saved — images could not be stored locally (storage full)', 'info');
+    } catch(_) {
+      toast('Could not save — browser storage is full', 'err');
+    }
+  }
 }
 function load() {
   try {
