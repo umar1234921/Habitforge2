@@ -1179,7 +1179,7 @@
   const mediaSyncSignatures = new Map();
 
   function mediaSignature(mediaMap) {
-    if (!mediaMap || typeof mediaMap !== 'object') return '';
+    if (!mediaMap || typeof mediaMap !== 'object' || Array.isArray(mediaMap)) return '';
     const names = Object.keys(mediaMap).sort();
     if (!names.length) return '';
     return names.map(name => `${name}:${String(mediaMap[name] || '').length}`).join('|');
@@ -1222,7 +1222,7 @@
         const seenChunkIds = new Set();
         chunkSnap.forEach(chunkDoc => {
           const chunkIdx = Number(chunkDoc.id);
-          if (!Number.isFinite(chunkIdx) || chunkIdx < 0 || chunkIdx >= chunkCount) {
+          if (!Number.isInteger(chunkIdx) || chunkIdx < 0 || chunkIdx >= chunkCount) {
             console.warn('[HabitForge] Skipping invalid media chunk id:', deckId, chunkDoc.id);
             return;
           }
@@ -1235,7 +1235,7 @@
         if (seenChunkIds.size < chunkCount) {
           console.warn('[HabitForge] Missing one or more media chunks for deck:', deckId);
         }
-      } else if (meta.media && typeof meta.media === 'object') {
+      } else if (meta.media && typeof meta.media === 'object' && !Array.isArray(meta.media)) {
         // Backward compatibility with older single-document media storage.
         Object.assign(media, meta.media);
       }
@@ -1282,6 +1282,7 @@
         mediaSyncSignatures.set(deck.id, sig);
       } else {
         console.warn(`[HabitForge] Media cloud save failed for deck ${deck.id}:`, failures);
+        throw new Error(`Media cloud save failed for deck ${deck.id}`);
       }
     }
   }
@@ -1393,7 +1394,7 @@
       cloudSaveInFlight = false;
       if (cloudSaveQueued) {
         cloudSaveQueued = false;
-        scheduleCloudSave();
+        fbSave();
       }
     }
   }
