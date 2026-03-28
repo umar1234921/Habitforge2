@@ -22,6 +22,7 @@ const S = {
   timetable: {},       // { 'YYYY-MM-DD': [ { id, startTime, endTime, subject, task, notes } ] }
   sleepLog: [],        // [ { id, date, preSleep, duration, grogginess, postSleep, notes } ]
   flashcardDecks: [],  // [ { id, name, subject, examDate, dailyTarget, cards:[] } ]
+  fcSession: null,     // saved mid-session progress (synced to cloud for cross-device resume)
   errorLog: [],        // [ { id, date, subject, paper, mistakes: [{ id, desc, marks, topicId, topicName, fixed }] } ]
   quickLinks: [
     { emoji: '🔗', label: '', url: '' },
