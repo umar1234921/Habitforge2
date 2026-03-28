@@ -1270,6 +1270,32 @@
     return mediaByDeck;
   }
 
+  // Retry a Firestore operation with exponential backoff when it fails due to
+  // transient errors such as RESOURCE_EXHAUSTED (rate limit) or UNAVAILABLE.
+  async function withRetry(fn, maxRetries = 4, baseDelayMs = 1000) {
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        return await fn();
+      } catch (e) {
+        const isTransient = e && (
+          e.code === 'resource-exhausted' ||
+          e.code === 'unavailable' ||
+          (e.message && (
+            e.message.includes('RESOURCE_EXHAUSTED') ||
+            e.message.includes('UNAVAILABLE') ||
+            e.message.includes('quota')
+          ))
+        );
+        if (!isTransient || attempt === maxRetries) throw e;
+        // Jittered exponential back-off: 1 s → 2 s → 4 s → 8 s (50%–100% of nominal delay).
+        const jitter = 0.5 + Math.random() * 0.5;
+        const delayMs = baseDelayMs * Math.pow(2, attempt) * jitter;
+        console.warn(`[HabitForge] Firestore transient error (attempt ${attempt + 1}), retrying in ${Math.round(delayMs)}ms:`, e.code || e.message);
+        await new Promise(r => setTimeout(r, delayMs));
+      }
+    }
+  }
+
   async function fbSaveMedia(uid, decks) {
     if (!uid || !Array.isArray(decks)) return;
     for (const deck of decks) {
@@ -1280,31 +1306,45 @@
       if (mediaSyncSignatures.get(deck.id) === sig) continue;
 
       const chunks = splitMediaChunks(deck.media);
-      const writes = [];
-      // Chunks are written with zero-based sequential numeric IDs: 0..N-1.
-      chunks.forEach((chunk, i) => {
-        writes.push(
+      // Write chunks sequentially (not all in parallel) to avoid triggering Firestore
+      // RESOURCE_EXHAUSTED rate limits on large decks with many image chunks.
+      // Each write is individually retried with exponential back-off.
+      let failed = false;
+      let lastChunkError = null;
+      for (let i = 0; i < chunks.length; i++) {
+        try {
+          await withRetry(() =>
+            setDoc(
+              doc(db, 'gcse_users', uid, 'deck_media', deck.id, 'chunks', String(i)),
+              { media: chunks[i] },
+              { merge: true }
+            )
+          );
+          // Small pause between chunks to stay well within Firestore write rate limits.
+          if (i < chunks.length - 1) await new Promise(r => setTimeout(r, 150));
+        } catch (e) {
+          console.warn(`[HabitForge] Media chunk ${i} save failed for deck ${deck.id}:`, e);
+          lastChunkError = e;
+          failed = true;
+          break;
+        }
+      }
+
+      if (!failed) {
+        // updatedAt is for debugging/inspection in Firestore; not used in app logic.
+        await withRetry(() =>
           setDoc(
-            doc(db, 'gcse_users', uid, 'deck_media', deck.id, 'chunks', String(i)),
-            { media: chunk },
+            doc(db, 'gcse_users', uid, 'deck_media', deck.id),
+            { chunkCount: chunks.length, updatedAt: Date.now() },
             { merge: true }
           )
         );
-      });
-
-      const results = await Promise.allSettled(writes);
-      const failures = results.filter(r => r.status === 'rejected');
-      if (!failures.length) {
-        // updatedAt is for debugging/inspection in Firestore; not used in app logic.
-        await setDoc(
-          doc(db, 'gcse_users', uid, 'deck_media', deck.id),
-          { chunkCount: chunks.length, updatedAt: Date.now() },
-          { merge: true }
-        );
         mediaSyncSignatures.set(deck.id, sig);
       } else {
-        console.warn(`[HabitForge] Media cloud save failed for deck ${deck.id}:`, failures);
-        throw new Error(`Media cloud save failed for deck ${deck.id}`);
+        throw Object.assign(
+          new Error(`Media cloud save failed for deck ${deck.id}`),
+          { cause: lastChunkError }
+        );
       }
     }
   }
@@ -1407,7 +1447,7 @@
           ({ media, ...rest }) => rest
         );
       }
-      await setDoc(doc(db, 'gcse_users', fbUid), stateForCloud);
+      await withRetry(() => setDoc(doc(db, 'gcse_users', fbUid), stateForCloud));
       await fbSaveMedia(fbUid, S.flashcardDecks);
     } catch(e) {
       console.warn('[HabitForge] Cloud save failed:', e);

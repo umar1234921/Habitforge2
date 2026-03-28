@@ -353,19 +353,28 @@ function renderFCDecks() {
     const examSt = deck.examMode && deck.examDate ? SRS.examStats(deck) : null;
     const hasSubdecks = Array.isArray(deck.subdecks) && deck.subdecks.length > 0;
 
-    // Build subdeck dropdown items (only when deck has multiple subdecks and cards are due)
-    const subdeckMenuHtml = hasSubdecks && due > 0 ? `
-      <div class="fc-subdeck-menu fc-hidden">
-        <button class="fc-sdm-item" data-id="${deck.id}" data-subdeck="">
-          ▸ All <span class="fc-sdm-count">${due}</span>
+    // Build inline subdeck grid (shown below progress bar when deck has multiple subdecks)
+    const subdeckSectionHtml = hasSubdecks ? `
+      <div class="fc-subdeck-section">
+        <button class="fc-sdt-toggle" data-id="${deck.id}">
+          <span>${deck.subdecks.length} part${deck.subdecks.length !== 1 ? 's' : ''}</span>
+          <span class="fc-sdt-arrow">▾</span>
         </button>
-        ${deck.subdecks.map(sd => {
-          const sdDue = subdeckDueCount(deck, sd);
-          return `<button class="fc-sdm-item${sdDue === 0 ? ' fc-sdm-done' : ''}"
-            data-id="${deck.id}" data-subdeck="${escFc(sd)}"${sdDue === 0 ? ' disabled' : ''}>
-            ${sdDue === 0 ? '✓' : '▸'} ${escFc(sd)}${sdDue > 0 ? ` <span class="fc-sdm-count">${sdDue}</span>` : ''}
-          </button>`;
-        }).join('')}
+        <div class="fc-sd-grid fc-hidden">
+          <button class="fc-sd-tile" data-id="${deck.id}" data-subdeck="">
+            <span class="fc-sd-tile-name">All sections</span>
+            ${due > 0 ? `<span class="fc-sd-tile-badge">${due} due</span>` : `<span class="fc-sd-tile-ok">✓ up to date</span>`}
+          </button>
+          ${deck.subdecks.map(sd => {
+            const sdDue = subdeckDueCount(deck, sd);
+            return `<button class="fc-sd-tile${sdDue === 0 ? ' fc-sd-tile-done' : ''}"
+              data-id="${deck.id}" data-subdeck="${escFc(sd)}"
+              ${sdDue === 0 ? 'disabled' : ''}>
+              <span class="fc-sd-tile-name">${escFc(sd)}</span>
+              ${sdDue > 0 ? `<span class="fc-sd-tile-badge">${sdDue} due</span>` : `<span class="fc-sd-tile-ok">✓</span>`}
+            </button>`;
+          }).join('')}
+        </div>
       </div>` : '';
 
     return `
@@ -395,14 +404,10 @@ function renderFCDecks() {
           </div>
         </div>
         <div class="fc-deck-actions">
-          <div class="fc-study-wrap">
-            <button class="btn-primary fc-ds-btn" data-id="${deck.id}"
-              ${due === 0 ? 'disabled title="No cards due"' : ''}
-              ${hasSubdecks && due > 0 ? 'data-has-subdecks="1"' : ''}>
-              ${due > 0 ? `▶ Study (${due})` : '✓ Done'}${hasSubdecks && due > 0 ? ' ▾' : ''}
-            </button>
-            ${subdeckMenuHtml}
-          </div>
+          <button class="btn-primary fc-ds-btn" data-id="${deck.id}"
+            ${due === 0 ? 'disabled title="No cards due"' : ''}>
+            ${due > 0 ? `▶ Study (${due})` : '✓ Done'}
+          </button>
           <button class="fb fc-dm-btn" data-id="${deck.id}" title="Manage cards">⚙ Manage</button>
           <button class="ti-del fc-dd-btn" data-id="${deck.id}" title="Delete deck">✕</button>
         </div>
@@ -414,27 +419,25 @@ function renderFCDecks() {
         <span>${pct}% learned</span>
         <span>${learned} / ${total}</span>
       </div>
+      ${subdeckSectionHtml}
     </div>`;
   }).join('');
 
   list.querySelectorAll('.fc-ds-btn').forEach(btn => {
+    btn.addEventListener('click', () => startStudySession(btn.dataset.id));
+  });
+  list.querySelectorAll('.fc-sdt-toggle').forEach(btn => {
     btn.addEventListener('click', () => {
-      const wrap = btn.closest('.fc-study-wrap');
-      const menu = wrap ? wrap.querySelector('.fc-subdeck-menu') : null;
-      if (menu) {
-        // Toggle this dropdown; close any other open ones first
-        const isHidden = menu.classList.contains('fc-hidden');
-        document.querySelectorAll('.fc-subdeck-menu').forEach(m => m.classList.add('fc-hidden'));
-        if (isHidden) menu.classList.remove('fc-hidden');
-      } else {
-        startStudySession(btn.dataset.id);
+      const section = btn.closest('.fc-subdeck-section');
+      const grid = section ? section.querySelector('.fc-sd-grid') : null;
+      if (grid) {
+        grid.classList.toggle('fc-hidden');
+        btn.classList.toggle('fc-sdt-open', !grid.classList.contains('fc-hidden'));
       }
     });
   });
-  list.querySelectorAll('.fc-sdm-item').forEach(btn => {
+  list.querySelectorAll('.fc-sd-tile').forEach(btn => {
     btn.addEventListener('click', () => {
-      const menu = btn.closest('.fc-subdeck-menu');
-      if (menu) menu.classList.add('fc-hidden');
       startStudySession(btn.dataset.id, btn.dataset.subdeck || null);
     });
   });
@@ -1420,13 +1423,6 @@ function initFlashcards() {
   // Subject filter
   const filterEl = $('fc-subject-filter');
   if (filterEl) filterEl.addEventListener('change', renderFCDecks);
-
-  // Close subdeck dropdown when clicking outside the study wrap
-  document.addEventListener('click', e => {
-    if (!e.target.closest('.fc-study-wrap')) {
-      document.querySelectorAll('.fc-subdeck-menu').forEach(m => m.classList.add('fc-hidden'));
-    }
-  });
 
   // Manage panel
   $('fc-back-to-decks').addEventListener('click', () => {
