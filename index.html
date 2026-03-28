@@ -1214,7 +1214,7 @@
       const deckId = deckDoc.id;
       const meta = deckDoc.data() || {};
       let chunkCount = Number(meta.chunkCount);
-      if (!Number.isFinite(chunkCount)) chunkCount = 0;
+      if (!Number.isFinite(chunkCount) || chunkCount < 0) chunkCount = 0;
       const media = {};
 
       if (chunkCount > 0) {
@@ -1258,13 +1258,7 @@
       if (mediaSyncSignatures.get(deck.id) === sig) continue;
 
       const chunks = splitMediaChunks(deck.media);
-      const writes = [
-        setDoc(
-          doc(db, 'gcse_users', uid, 'deck_media', deck.id),
-          { chunkCount: chunks.length, updatedAt: Date.now() },
-          { merge: true }
-        )
-      ];
+      const writes = [];
       // Chunks are written with zero-based sequential numeric IDs: 0..N-1.
       chunks.forEach((chunk, i) => {
         writes.push(
@@ -1279,6 +1273,12 @@
       const results = await Promise.allSettled(writes);
       const failures = results.filter(r => r.status === 'rejected');
       if (!failures.length) {
+        // updatedAt is for debugging/inspection in Firestore; not used in app logic.
+        await setDoc(
+          doc(db, 'gcse_users', uid, 'deck_media', deck.id),
+          { chunkCount: chunks.length, updatedAt: Date.now() },
+          { merge: true }
+        );
         mediaSyncSignatures.set(deck.id, sig);
       } else {
         console.warn(`[HabitForge] Media cloud save failed for deck ${deck.id}:`, failures);
@@ -1326,12 +1326,11 @@
               return deck;
             });
             if (idbSavePromises.length) {
-              Promise.allSettled(idbSavePromises).then(results => {
-                const failures = results.filter(r => r.status === 'rejected');
-                if (failures.length) {
-                  console.warn('[HabitForge] IDB save from cloud media had failures:', failures);
-                }
-              });
+              const idbResults = await Promise.allSettled(idbSavePromises);
+              const failures = idbResults.filter(r => r.status === 'rejected');
+              if (failures.length) {
+                console.warn('[HabitForge] IDB save from cloud media had failures:', failures);
+              }
             }
           }
         } catch(idbErr) {
