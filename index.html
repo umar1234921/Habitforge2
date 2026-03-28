@@ -1173,6 +1173,7 @@
   let cloudSaveTimer = null;
   let cloudSaveInFlight = false;
   let cloudSaveQueued = false;
+  // Milliseconds to wait after a local save before attempting cloud sync.
   const CLOUD_SAVE_DEBOUNCE_MS = 2500;
   // Firestore doc limit is 1 MiB; keep chunks comfortably below that to allow JSON overhead.
   const MAX_MEDIA_CHUNK_CHARS = 700000;
@@ -1214,7 +1215,12 @@
       const deckId = deckDoc.id;
       const meta = deckDoc.data() || {};
       let chunkCount = Number(meta.chunkCount);
-      if (!Number.isFinite(chunkCount) || chunkCount < 0) chunkCount = 0;
+      if (!Number.isFinite(chunkCount) || chunkCount < 0) {
+        if (chunkCount < 0) {
+          console.warn('[HabitForge] Invalid negative chunkCount metadata for deck:', deckId, chunkCount);
+        }
+        chunkCount = 0;
+      }
       const media = {};
 
       if (chunkCount > 0) {
@@ -1222,6 +1228,7 @@
         const seenChunkIds = new Set();
         chunkSnap.forEach(chunkDoc => {
           const chunkIdx = Number(chunkDoc.id);
+          // Chunk IDs are zero-based (0..chunkCount-1).
           if (!Number.isInteger(chunkIdx) || chunkIdx < 0 || chunkIdx >= chunkCount) {
             console.warn('[HabitForge] Skipping invalid media chunk id:', deckId, chunkDoc.id);
             return;
