@@ -645,11 +645,26 @@ function _fcStartFresh(deck, due) {
   fcClearSavedSession();
 }
 
-function startStudySession(deckId, subdeckName) {
+async function startStudySession(deckId, subdeckName) {
   _fcCurrentDeckId  = deckId;
   _fcCurrentSubdeck = subdeckName || null;
   const deck = fcCurrentDeck();
   if (!deck) return;
+
+  // If the deck has no media (e.g. the initial IDB restore at startup missed it,
+  // or the user is studying a deck imported in a previous session where the IDB
+  // write was not yet committed), try a targeted reload from IndexedDB now.
+  if (!deck.media) {
+    try {
+      const allMedia = await MediaDB.loadAll();
+      const media = allMedia[deckId];
+      if (media && Object.keys(media).length) {
+        deck.media = media; // mutate the live deck reference in S.flashcardDecks
+      }
+    } catch (e) {
+      console.warn('[media IDB lazy restore]', e);
+    }
+  }
 
   // When studying a specific subdeck, restrict the card pool to that subdeck.
   const deckForStudy = _fcCurrentSubdeck
@@ -1270,6 +1285,9 @@ async function importApkg(file) {
     });
 
     // ── 9c: Create one HabitForge deck per root group ────────────────────────
+    // Collect IDB save promises so we can await them all before finishing.
+    const idbSavePromises = [];
+
     rootGroups.forEach((groups, rootName) => {
       if (groups.length === 1 && groups[0].subName === '') {
         // Plain deck — no subdeck hierarchy, store as-is (original behaviour)
@@ -1288,7 +1306,7 @@ async function importApkg(file) {
           lastStudiedDate: null,
         });
         if (Object.keys(media).length) {
-          MediaDB.save(deckId, media).catch(e => console.warn('[media IDB]', e));
+          idbSavePromises.push(MediaDB.save(deckId, media));
         }
         totalCards += cards.length;
         decksAdded++;
@@ -1310,7 +1328,7 @@ async function importApkg(file) {
           lastStudiedDate: null,
         });
         if (Object.keys(media).length) {
-          MediaDB.save(deckId, media).catch(e => console.warn('[media IDB]', e));
+          idbSavePromises.push(MediaDB.save(deckId, media));
         }
         totalCards += cards.length;
         decksAdded++;
@@ -1346,12 +1364,23 @@ async function importApkg(file) {
           lastStudiedDate: null,
         });
         if (Object.keys(allMedia).length) {
-          MediaDB.save(deckId, allMedia).catch(e => console.warn('[media IDB]', e));
+          idbSavePromises.push(MediaDB.save(deckId, allMedia));
         }
         totalCards += allCards.length;
         decksAdded++;
       }
     });
+
+    // Await all IndexedDB saves so that images are persisted before we return.
+    // If any save fails, warn the user that images may disappear after reload.
+    if (idbSavePromises.length) {
+      const idbResults = await Promise.allSettled(idbSavePromises);
+      const failures   = idbResults.filter(r => r.status === 'rejected').map(r => r.reason);
+      if (failures.length) {
+        console.warn('[media IDB] one or more saves failed:', failures);
+        toast('⚠️ Images saved for now but may not survive a page reload — try re-importing if they disappear.', 'err');
+      }
+    }
 
     save();
     renderFCDecks();
