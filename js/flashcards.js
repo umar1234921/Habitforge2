@@ -2,6 +2,62 @@
    FLASHCARDS — Anki SM-2 Spaced Repetition
    ================================================================ */
 
+// ─── MEDIA PERSISTENCE (IndexedDB) ───────────────────────
+// Images are stored here instead of localStorage so that the 5 MB
+// localStorage quota never causes them to be silently dropped.
+const MediaDB = (() => {
+  const DB_NAME = 'hf_media';
+  const STORE   = 'deckMedia';
+  const VERSION = 1;
+
+  function open() {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB_NAME, VERSION);
+      req.onupgradeneeded = e => e.target.result.createObjectStore(STORE);
+      req.onsuccess = e => resolve(e.target.result);
+      req.onerror   = e => reject(e.target.error);
+    });
+  }
+
+  return {
+    async save(deckId, mediaMap) {
+      if (!deckId || !mediaMap || !Object.keys(mediaMap).length) return;
+      const db = await open();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE, 'readwrite');
+        tx.objectStore(STORE).put(mediaMap, deckId);
+        tx.oncomplete = () => { db.close(); resolve(); };
+        tx.onerror    = e => { db.close(); reject(e.target.error); };
+      });
+    },
+
+    async loadAll() {
+      const db     = await open();
+      const result = {};
+      return new Promise((resolve, reject) => {
+        const tx      = db.transaction(STORE, 'readonly');
+        const curReq  = tx.objectStore(STORE).openCursor();
+        curReq.onsuccess = e => {
+          const cur = e.target.result;
+          if (cur) { result[cur.key] = cur.value; cur.continue(); }
+          else { db.close(); resolve(result); }
+        };
+        curReq.onerror = e => { db.close(); reject(e.target.error); };
+      });
+    },
+
+    async delete(deckId) {
+      const db = await open();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(STORE, 'readwrite');
+        tx.objectStore(STORE).delete(deckId);
+        tx.oncomplete = () => { db.close(); resolve(); };
+        tx.onerror    = e => { db.close(); reject(e.target.error); };
+      });
+    },
+  };
+})();
+
 // ─── DATE HELPERS (timezone-safe) ────────────────────────
 function parseLocalDate(str) {
   if (!str) return null;
@@ -391,6 +447,7 @@ function renderFCDecks() {
 function deleteDeck(id) {
   if (!confirm('Delete this deck and all its cards?')) return;
   S.flashcardDecks = (S.flashcardDecks || []).filter(d => d.id !== id);
+  MediaDB.delete(id).catch(e => console.warn('[media IDB delete]', e));
   save();
   renderFCDecks();
   toast('Deck deleted');
@@ -1057,14 +1114,23 @@ async function importApkg(file) {
         const mediaJson = JSON.parse(await mediaEntry.async('string'));
         await Promise.all(
           Object.entries(mediaJson).map(async ([key, filename]) => {
-            const mime = apkgImageMime(filename);
-            if (!mime) return; // skip audio, video, etc.
-            const mediaFile = zip.file(key);
-            if (!mediaFile) return;
-            const bytes = await mediaFile.async('uint8array');
-            // Convert to base64 data URL using a typed array approach
-            const binary = Array.from(bytes, b => String.fromCharCode(b)).join('');
-            mediaMap[filename] = `data:${mime};base64,${btoa(binary)}`;
+            try {
+              const mime = apkgImageMime(filename);
+              if (!mime) return; // skip audio, video, etc.
+              const mediaFile = zip.file(key);
+              if (!mediaFile) return;
+              const bytes = await mediaFile.async('uint8array');
+              // Use FileReader to convert to a base64 data URL efficiently
+              const dataUrl = await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload  = () => resolve(reader.result);
+                reader.onerror = () => reject(reader.error);
+                reader.readAsDataURL(new Blob([bytes], { type: mime }));
+              });
+              mediaMap[filename] = dataUrl;
+            } catch (imgErr) {
+              console.warn(`[apkg media] skipping ${filename}:`, imgErr);
+            }
           })
         );
       }
@@ -1208,8 +1274,9 @@ async function importApkg(file) {
       if (groups.length === 1 && groups[0].subName === '') {
         // Plain deck — no subdeck hierarchy, store as-is (original behaviour)
         const { cards, media } = groups[0];
+        const deckId = uid();
         S.flashcardDecks.push({
-          id:              uid(),
+          id:              deckId,
           name:            rootName,
           subject:         '',
           examDate:        '',
@@ -1220,14 +1287,18 @@ async function importApkg(file) {
           streak:          0,
           lastStudiedDate: null,
         });
+        if (Object.keys(media).length) {
+          MediaDB.save(deckId, media).catch(e => console.warn('[media IDB]', e));
+        }
         totalCards += cards.length;
         decksAdded++;
       } else if (groups.length === 1) {
         // Only one subdeck exported under this root — keep the full Anki name
         // so no information is lost (no dropdown needed for a single part).
         const { subName, cards, media } = groups[0];
+        const deckId = uid();
         S.flashcardDecks.push({
-          id:              uid(),
+          id:              deckId,
           name:            `${rootName}${ANKI_SEP}${subName}`,
           subject:         '',
           examDate:        '',
@@ -1238,6 +1309,9 @@ async function importApkg(file) {
           streak:          0,
           lastStudiedDate: null,
         });
+        if (Object.keys(media).length) {
+          MediaDB.save(deckId, media).catch(e => console.warn('[media IDB]', e));
+        }
         totalCards += cards.length;
         decksAdded++;
       } else {
@@ -1257,8 +1331,9 @@ async function importApkg(file) {
           Object.assign(allMedia, media);
         });
 
+        const deckId = uid();
         S.flashcardDecks.push({
-          id:              uid(),
+          id:              deckId,
           name:            rootName,
           subject:         '',
           examDate:        '',
@@ -1270,6 +1345,9 @@ async function importApkg(file) {
           streak:          0,
           lastStudiedDate: null,
         });
+        if (Object.keys(allMedia).length) {
+          MediaDB.save(deckId, allMedia).catch(e => console.warn('[media IDB]', e));
+        }
         totalCards += allCards.length;
         decksAdded++;
       }
