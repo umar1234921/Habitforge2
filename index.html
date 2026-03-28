@@ -1228,14 +1228,29 @@
           }
           seenChunkIds.add(chunkIdx);
           const chunkData = chunkDoc.data();
-          if (chunkData && chunkData.media && typeof chunkData.media === 'object') {
+          if (chunkData && chunkData.media && typeof chunkData.media === 'object' && !Array.isArray(chunkData.media)) {
             Object.assign(media, chunkData.media);
           }
         });
         if (seenChunkIds.size < chunkCount) {
           console.warn('[HabitForge] Missing one or more media chunks for deck:', deckId);
         }
-      } else if (meta.media && typeof meta.media === 'object' && !Array.isArray(meta.media)) {
+      } else {
+        // Metadata may be missing/corrupted; try inferring from stored chunks.
+        const chunkSnap = await getDocs(collection(db, 'gcse_users', uid, 'deck_media', deckId, 'chunks'));
+        if (!chunkSnap.empty) {
+          console.warn('[HabitForge] Missing/invalid chunkCount metadata; inferring media chunks for deck:', deckId);
+          chunkSnap.forEach(chunkDoc => {
+            const chunkIdx = Number(chunkDoc.id);
+            if (!Number.isInteger(chunkIdx) || chunkIdx < 0) return;
+            const chunkData = chunkDoc.data();
+            if (chunkData && chunkData.media && typeof chunkData.media === 'object' && !Array.isArray(chunkData.media)) {
+              Object.assign(media, chunkData.media);
+            }
+          });
+        }
+      }
+      if (!Object.keys(media).length && meta.media && typeof meta.media === 'object' && !Array.isArray(meta.media)) {
         // Backward compatibility with older single-document media storage.
         Object.assign(media, meta.media);
       }
@@ -1251,7 +1266,7 @@
   async function fbSaveMedia(uid, decks) {
     if (!uid || !Array.isArray(decks)) return;
     for (const deck of decks) {
-      if (!deck || !deck.id || !deck.media || typeof deck.media !== 'object') continue;
+      if (!deck || !deck.id || !deck.media || typeof deck.media !== 'object' || Array.isArray(deck.media)) continue;
       const names = Object.keys(deck.media);
       if (!names.length) continue;
       const sig = mediaSignature(deck.media);
