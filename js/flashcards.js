@@ -444,8 +444,8 @@ function renderFCCardsList() {
     ${deck.cards.map(c => `
     <div class="fc-card-row">
       <div class="fc-cr-body">
-        <div class="fc-cr-front">${escFc(c.front)}</div>
-        <div class="fc-cr-back">${escFc(c.back)}</div>
+        <div class="fc-cr-front">${cardTextPreview(c.front)}</div>
+        <div class="fc-cr-back">${cardTextPreview(c.back)}</div>
       </div>
       <div class="fc-cr-meta">
         <span title="Interval">${c.interval || 0}d</span>
@@ -611,8 +611,9 @@ function renderStudyCard() {
 
   // Update the front face immediately — it's hidden behind the back face
   // while the unflip animation runs, so there is no visual glitch.
-  $('fc-front-text').textContent      = card.front;
-  $('fc-front-text-back').textContent = card.front;
+  const deck = fcCurrentDeck();
+  setCardContent($('fc-front-text'), card.front, deck);
+  setCardContent($('fc-front-text-back'), card.front, deck);
 
   $('fc-card-inner').classList.remove('fc-flipped');
   $('fc-flip-btn').classList.remove('fc-hidden');
@@ -623,12 +624,12 @@ function renderStudyCard() {
     // text until the flip animation completes (~450 ms) so the new card's
     // answer is not briefly visible while the card rotates back to front.
     setTimeout(() => {
-      $('fc-back-text').textContent = card.back;
+      setCardContent($('fc-back-text'), card.back, deck);
       updateGradeHints(card);
     }, FC_FLIP_DURATION_MS);
   } else {
     // Card was not flipped — safe to update immediately.
-    $('fc-back-text').textContent = card.back;
+    setCardContent($('fc-back-text'), card.back, deck);
     updateGradeHints(card);
   }
 }
@@ -792,12 +793,79 @@ function escFc(str) {
     .replace(/"/g, '&quot;');
 }
 
+/**
+ * Returns a plain-text preview of card content for the card list view.
+ * Image markers ({{img:filename}}) are shown as [image] and the result
+ * is HTML-escaped, so it is safe to inject into innerHTML.
+ */
+function cardTextPreview(text) {
+  return escFc(String(text || '').replace(/\{\{img:[^}]+\}\}/g, '[image]'));
+}
+
+/**
+ * Renders card content (possibly containing {{img:filename}} markers) directly
+ * into a DOM element, replacing markers with <img> elements sourced from the
+ * deck's media map.  Uses only safe DOM APIs — no innerHTML is set on untrusted
+ * content, so there is no XSS risk.
+ * @param {HTMLElement}  el   Target element (its children are replaced)
+ * @param {string}       text Card front or back text
+ * @param {object|null}  deck Current deck object (for deck.media map)
+ */
+function setCardContent(el, text, deck) {
+  while (el.firstChild) el.removeChild(el.firstChild);
+  const parts = String(text || '').split(/(\{\{img:[^}]+\}\})/);
+  parts.forEach(part => {
+    const m = part.match(/^\{\{img:(.+)\}\}$/);
+    if (m) {
+      const filename = m[1];
+      const src = deck && deck.media && deck.media[filename];
+      if (src) {
+        const img = document.createElement('img');
+        img.src = src;
+        img.alt = filename;
+        img.style.cssText = 'max-width:100%;max-height:300px;display:block;margin:4px auto';
+        el.appendChild(img);
+      } else {
+        el.appendChild(document.createTextNode(`[image: ${filename}]`));
+      }
+    } else {
+      // Plain text — preserve newlines
+      const lines = part.split('\n');
+      lines.forEach((line, i) => {
+        if (i > 0) el.appendChild(document.createElement('br'));
+        el.appendChild(document.createTextNode(line));
+      });
+    }
+  });
+}
+
+/**
+ * Returns the image MIME type for a given filename based on its extension,
+ * or null if the extension is not a supported image type (e.g. audio/video).
+ * @param {string} filename
+ * @returns {string|null}
+ */
+function apkgImageMime(filename) {
+  const ext = (String(filename).split('.').pop() || '').toLowerCase();
+  const types = {
+    jpg: 'image/jpeg', jpeg: 'image/jpeg', png:  'image/png',
+    gif: 'image/gif',  webp: 'image/webp', svg:  'image/svg+xml',
+    bmp: 'image/bmp',  ico:  'image/x-icon',
+  };
+  return types[ext] || null;
+}
+
 // ─── ANKI .APKG IMPORT ─────────────────────────────────────
 
 /**
  * Strips Anki HTML markup and decodes HTML entities from a field string.
  * Uses the browser's DOM parser instead of regex to handle all edge cases
  * correctly (avoids incomplete sanitization and double-escaping issues).
+ *
+ * <img> tags are converted to {{img:filename}} markers so that the card
+ * renderer can later replace them with actual <img> elements sourced from
+ * the deck's media map.  The markers survive textContent extraction because
+ * they contain no HTML characters.
  */
 function stripAnkiHtml(str) {
   // Pre-process tags that should become newlines, since textContent ignores them
@@ -805,8 +873,15 @@ function stripAnkiHtml(str) {
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/div>/gi, '\n')
     .replace(/<\/p>/gi, '\n')
-    .replace(/<img[^>]*>/gi, '[image]');  // preserve image references as text
-  // Let the browser's HTML parser strip all remaining tags and decode entities
+    .replace(/<img[^>]*>/gi, imgTag => {
+      // Extract src attribute (handles both quoted and unquoted values)
+      const m = imgTag.match(/\bsrc=["']?([^"'\s>]+)["']?/i);
+      const filename = m ? m[1] : null;
+      // {{img:filename}} is plain text — survives the textContent pass below
+      return filename ? `{{img:${filename}}}` : '[image]';
+    });
+  // Let the browser's HTML parser strip all remaining tags and decode entities.
+  // {{img:...}} markers contain no HTML so they pass through unchanged.
   const div = document.createElement('div');
   div.innerHTML = withNewlines;
   return (div.textContent || '')
@@ -837,15 +912,24 @@ function loadScript(src, integrity) {
 }
 
 /**
- * Imports an Anki .apkg file and creates a new flashcard deck from its notes.
+ * Imports an Anki .apkg file and creates one flashcard deck per Anki
+ * (sub)deck found inside the package.
  *
  * An .apkg is a ZIP archive containing:
  *   - collection.anki21 or collection.anki2 — a SQLite database
- *   - (optional) media files
+ *   - media                                 — JSON map of key → filename
+ *   - 0, 1, 2, …                            — the actual media files
  *
- * The SQLite `notes` table stores card fields joined by the ASCII Unit Separator
- * character (\x1f).  The first field is treated as the question (front) and the
- * second field as the answer (back), matching Anki's Basic note type.
+ * Subdecks: the `col` table's `decks` JSON column contains every deck
+ * (including subdecks) with a unique numeric id.  The `cards` table links
+ * each card to a deck via its `did` column.  We join `notes` with `cards`
+ * so that each note is associated with its deck, then create a separate
+ * HabitForge deck for every distinct Anki deck that has notes.
+ *
+ * Images: image files inside the ZIP are extracted and stored as base-64
+ * data URLs in a `media` map on the deck object.  Card text retains
+ * {{img:filename}} markers which `setCardContent()` replaces with real
+ * <img> elements when rendering.
  *
  * Libraries loaded lazily from CDN:
  *   - JSZip  3.10.1  (zip extraction, pure JS)
@@ -868,7 +952,6 @@ async function importApkg(file) {
 
     // ── Step 2: Load JSZip and unzip the .apkg ─────────────────────────────
     await loadScript(JSZIP_CDN, JSZIP_SRI);
-    // JSZip is now available as the global `JSZip`
     const zip = await JSZip.loadAsync(arrayBuffer);
 
     // .apkg may use either the newer .anki21 or the legacy .anki2 filename.
@@ -892,33 +975,70 @@ async function importApkg(file) {
     const dbBytes = await dbEntry.async('uint8array');
     toast('Importing .apkg — reading cards…', 'info');
 
-    // ── Step 3: Load sql.js (WebAssembly SQLite) ───────────────────────────
+    // ── Step 3: Extract images from the .apkg ─────────────────────────────
+    // The `media` ZIP entry is a JSON object mapping numeric string keys
+    // (the actual ZIP entry names) to the real media filenames.
+    // Example: {"0": "cat.jpg", "1": "sound.mp3"}
+    // We convert each image file to a base-64 data URL and store it by
+    // its real filename so card text (which references filenames, not keys)
+    // can look it up at render time.
+    /** @type {Object.<string, string>} filename → data: URL */
+    const mediaMap = {};
+    try {
+      const mediaEntry = zip.file('media');
+      if (mediaEntry) {
+        const mediaJson = JSON.parse(await mediaEntry.async('string'));
+        await Promise.all(
+          Object.entries(mediaJson).map(async ([key, filename]) => {
+            const mime = apkgImageMime(filename);
+            if (!mime) return; // skip audio, video, etc.
+            const mediaFile = zip.file(key);
+            if (!mediaFile) return;
+            const bytes = await mediaFile.async('uint8array');
+            // Convert to base64 data URL using a typed array approach
+            const binary = Array.from(bytes, b => String.fromCharCode(b)).join('');
+            mediaMap[filename] = `data:${mime};base64,${btoa(binary)}`;
+          })
+        );
+      }
+    } catch (err) { console.warn('[apkg media]', err); }
+
+    // ── Step 4: Load sql.js (WebAssembly SQLite) ───────────────────────────
     await loadScript(SQLJS_CDN, SQLJS_SRI);
-    // initSqlJs is set on window by sql-wasm.js when loaded as a plain script
     const SQL = await window.initSqlJs({
       locateFile: f => SQLJS_BASE + f,
     });
 
-    // ── Step 4: Open the SQLite database ──────────────────────────────────
+    // ── Step 5: Open the SQLite database ──────────────────────────────────
     const db = new SQL.Database(dbBytes);
 
-    // ── Step 5: Determine deck name (fall back to filename) ────────────────
-    let deckName = file.name.replace(/\.apkg$/i, '');
+    // ── Step 6: Parse all decks, including subdecks ────────────────────────
+    // The `col` table's `decks` column is a JSON object where each value has
+    // an `id` (numeric) and a `name` (e.g. "Spanish::Vocabulary" for subdecks).
+    const fallbackName = file.name.replace(/\.apkg$/i, '');
+    /** @type {Object.<string, string>} deckId (string) → deck name */
+    const deckIdToName = {};
     try {
       const colRes = db.exec('SELECT decks FROM col LIMIT 1');
       if (colRes.length && colRes[0].values.length) {
         const decksJson = JSON.parse(colRes[0].values[0][0]);
-        // Pick the first non-Default deck
-        const deckEntry = Object.values(decksJson).find(
-          d => d.name && d.name !== 'Default'
-        );
-        if (deckEntry) deckName = deckEntry.name;
+        Object.values(decksJson).forEach(d => {
+          if (d.id !== null && d.id !== undefined && d.name && d.name !== 'Default') {
+            deckIdToName[String(d.id)] = d.name;
+          }
+        });
       }
-    } catch (err) { console.warn('[apkg deck name]', err); }
+    } catch (err) { console.warn('[apkg decks]', err); }
 
-    // ── Step 6: Read notes ─────────────────────────────────────────────────
-    // Fields are separated by the ASCII Unit Separator character (0x1f)
-    const notesRes = db.exec('SELECT flds FROM notes');
+    // ── Step 7: Read notes with their deck IDs ────────────────────────────
+    // Join notes with cards to determine which deck each note belongs to.
+    // A note may produce multiple card templates (e.g. Basic + Reversed),
+    // all in the same deck; MIN(did) selects one representative deck id.
+    const notesRes = db.exec(
+      'SELECT n.flds, MIN(c.did) AS did ' +
+      'FROM notes n JOIN cards c ON c.nid = n.id ' +
+      'GROUP BY n.id'
+    );
     db.close();
 
     if (!notesRes.length || !notesRes[0].values.length) {
@@ -926,15 +1046,16 @@ async function importApkg(file) {
       return;
     }
 
-    // ── Step 7: Parse each note into a front/back card ────────────────────
+    // ── Step 8: Parse each note and group cards by deck ───────────────────
     // Fields are separated by \x1f; the first field is always the front.
-    // The back (second field) may be empty for cloze notes or one-sided
-    // card types — those are still imported so the user can review them.
-    // sql.js may return BLOB columns as Uint8Array; decode to string first.
+    // The back (second field) may be empty for cloze notes — still imported.
     const FIELD_SEP = '\x1f';
-    const cards = [];
+    /** @type {Map<string, Array>} deckId → flashcard array */
+    const deckCards = new Map();
+
     notesRes[0].values.forEach(row => {
       let rawFlds = row[0];
+      const did   = String(row[1] || '');
       if (rawFlds == null) return;
       if (rawFlds instanceof Uint8Array) {
         try {
@@ -947,30 +1068,64 @@ async function importApkg(file) {
       const fields = String(rawFlds).split(FIELD_SEP);
       const front  = stripAnkiHtml(fields[0] || '');
       const back   = stripAnkiHtml(fields[1] || '');
-      if (front) cards.push(makeFlashcard(front, back));
+      if (!front) return;
+      if (!deckCards.has(did)) deckCards.set(did, []);
+      deckCards.get(did).push(makeFlashcard(front, back));
     });
 
-    if (!cards.length) {
+    if (!deckCards.size || [...deckCards.values()].every(arr => !arr.length)) {
       toast('No valid Q&A pairs found in the .apkg file', 'err');
       return;
     }
 
-    // ── Step 8: Create the deck and save ──────────────────────────────────
+    // ── Step 9: Create one HabitForge deck per Anki (sub)deck ────────────
     if (!S.flashcardDecks) S.flashcardDecks = [];
-    S.flashcardDecks.push({
-      id:              uid(),
-      name:            deckName,
-      subject:         '',
-      examDate:        '',
-      dailyTarget:     20,
-      examMode:        false,
-      cards,
-      streak:          0,
-      lastStudiedDate: null,
+    let totalCards = 0;
+    let decksAdded = 0;
+
+    deckCards.forEach((cards, did) => {
+      if (!cards.length) return;
+      const name = deckIdToName[did] || fallbackName;
+
+      // Build a media subset containing only images used by this deck's cards
+      const usedMedia = {};
+      if (Object.keys(mediaMap).length) {
+        const imgRe = /\{\{img:([^}]+)\}\}/g;
+        cards.forEach(card => {
+          [card.front, card.back].forEach(text => {
+            let m;
+            imgRe.lastIndex = 0;
+            while ((m = imgRe.exec(text)) !== null) {
+              const fn = m[1];
+              if (mediaMap[fn]) usedMedia[fn] = mediaMap[fn];
+            }
+          });
+        });
+      }
+
+      S.flashcardDecks.push({
+        id:              uid(),
+        name,
+        subject:         '',
+        examDate:        '',
+        dailyTarget:     20,
+        examMode:        false,
+        cards,
+        ...(Object.keys(usedMedia).length ? { media: usedMedia } : {}),
+        streak:          0,
+        lastStudiedDate: null,
+      });
+
+      totalCards += cards.length;
+      decksAdded++;
     });
+
     save();
     renderFCDecks();
-    toast(`✓ Imported "${deckName}" — ${cards.length} card${cards.length !== 1 ? 's' : ''}`);
+
+    const deckWord = decksAdded === 1 ? 'deck' : 'decks';
+    const cardWord = totalCards !== 1 ? 'cards' : 'card';
+    toast(`✓ Imported ${decksAdded} ${deckWord} — ${totalCards} ${cardWord}`);
 
   } catch (err) {
     console.error('[apkg import]', err);
