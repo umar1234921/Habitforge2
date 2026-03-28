@@ -1176,7 +1176,20 @@
     try {
       const snap = await getDoc(doc(db, 'gcse_users', uid));
       if (snap.exists()) {
-        Object.assign(S, snap.data());
+        const cloudData = snap.data();
+        // Preserve any locally-added decks that haven't synced to the cloud yet
+        // (e.g. decks imported from .apkg before the user signed in)
+        const localDecks = Array.isArray(S.flashcardDecks) ? S.flashcardDecks : [];
+        const cloudDecks = Array.isArray(cloudData.flashcardDecks) ? cloudData.flashcardDecks : [];
+        const cloudDeckIds = new Set(cloudDecks.map(d => d.id).filter(Boolean));
+        const orphanedLocalDecks = localDecks.filter(d => d.id && !cloudDeckIds.has(d.id));
+        Object.assign(S, cloudData);
+        if (orphanedLocalDecks.length > 0) {
+          // Merge local-only decks into the state and push the merged result to cloud
+          const mergedById = new Map([...S.flashcardDecks, ...orphanedLocalDecks].map(d => [d.id, d]));
+          S.flashcardDecks = [...mergedById.values()];
+          fbSave();
+        }
         renderDashboard();
         renderHabits();
         renderTodos();
@@ -1188,7 +1201,9 @@
         updateStreakDisplay();
         console.log('[HabitForge] ☁ Cloud data loaded');
       } else {
-        console.log('[HabitForge] No cloud data yet — starting fresh');
+        // No cloud document yet — push all local data (including any imported decks) to cloud
+        console.log('[HabitForge] No cloud data yet — pushing local data to cloud');
+        fbSave();
       }
     } catch(e) {
       console.warn('[HabitForge] Cloud load failed:', e);
@@ -1205,16 +1220,15 @@
     }
   }
 
-  // Override the app's local save() so every save also goes to cloud
-  document.addEventListener('DOMContentLoaded', () => {
-    const _localSave = window.save;
-    if (typeof _localSave === 'function') {
-      window.save = function() {
-        _localSave();
-        fbSave();
-      };
-    }
-  });
+  // Override the app's local save() so every save also goes to cloud.
+  // Module scripts always execute after DOM parsing, so we can apply this directly.
+  const _localSave = window.save;
+  if (typeof _localSave === 'function') {
+    window.save = function() {
+      _localSave();
+      fbSave();
+    };
+  }
 
   // Wire up the static sync button (must be declared before onAuthStateChanged callback below)
   const syncBtn = document.getElementById('sync-btn');
