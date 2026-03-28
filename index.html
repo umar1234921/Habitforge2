@@ -1174,6 +1174,8 @@
   let cloudSaveInFlight = false;
   let cloudSaveQueued = false;
   const CLOUD_SAVE_DEBOUNCE_MS = 2500;
+  // Firestore doc limit is 1 MiB; keep chunks comfortably below that to allow JSON overhead.
+  const MAX_MEDIA_CHUNK_CHARS = 700000;
   const mediaSyncSignatures = new Map();
 
   function mediaSignature(mediaMap) {
@@ -1183,7 +1185,7 @@
     return names.map(name => `${name}:${String(mediaMap[name] || '').length}`).join('|');
   }
 
-  function splitMediaChunks(mediaMap, maxChars = 700000) {
+  function splitMediaChunks(mediaMap, maxChars = MAX_MEDIA_CHUNK_CHARS) {
     const entries = Object.entries(mediaMap || {});
     if (!entries.length) return [];
     const chunks = [];
@@ -1191,6 +1193,7 @@
     let curSize = 0;
     entries.forEach(([filename, dataUrl]) => {
       const safeData = String(dataUrl || '');
+      // Include a small overhead buffer for JSON quoting + key/value separators.
       const estSize = filename.length + safeData.length + 16;
       if (curSize > 0 && curSize + estSize > maxChars) {
         chunks.push(cur);
@@ -1210,19 +1213,28 @@
     for (const deckDoc of deckMediaSnap.docs) {
       const deckId = deckDoc.id;
       const meta = deckDoc.data() || {};
-      const chunkCount = Number.isFinite(Number(meta.chunkCount)) ? Number(meta.chunkCount) : 0;
+      let chunkCount = Number(meta.chunkCount);
+      if (!Number.isFinite(chunkCount)) chunkCount = 0;
       const media = {};
 
       if (chunkCount > 0) {
         const chunkSnap = await getDocs(collection(db, 'gcse_users', uid, 'deck_media', deckId, 'chunks'));
+        const seenChunkIds = new Set();
         chunkSnap.forEach(chunkDoc => {
           const chunkIdx = Number(chunkDoc.id);
-          if (!Number.isFinite(chunkIdx) || chunkIdx < 0 || chunkIdx >= chunkCount) return;
+          if (!Number.isFinite(chunkIdx) || chunkIdx < 0 || chunkIdx >= chunkCount) {
+            console.warn('[HabitForge] Skipping invalid media chunk id:', deckId, chunkDoc.id);
+            return;
+          }
+          seenChunkIds.add(chunkIdx);
           const chunkData = chunkDoc.data();
           if (chunkData && chunkData.media && typeof chunkData.media === 'object') {
             Object.assign(media, chunkData.media);
           }
         });
+        if (seenChunkIds.size < chunkCount) {
+          console.warn('[HabitForge] Missing one or more media chunks for deck:', deckId);
+        }
       } else if (meta.media && typeof meta.media === 'object') {
         // Backward compatibility with older single-document media storage.
         Object.assign(media, meta.media);
@@ -1253,6 +1265,7 @@
           { merge: true }
         )
       ];
+      // Chunks are written with zero-based sequential numeric IDs: 0..N-1.
       chunks.forEach((chunk, i) => {
         writes.push(
           setDoc(
@@ -1305,7 +1318,7 @@
             S.flashcardDecks = S.flashcardDecks.map(deck => {
               const media = cloudMedia[deck.id] || allIdbMedia[deck.id];
               if (media && Object.keys(media).length) {
-                if (cloudMedia[deck.id] && MediaDB && typeof MediaDB.save === 'function') {
+                if (cloudMedia[deck.id]) {
                   idbSavePromises.push(MediaDB.save(deck.id, media));
                 }
                 return { ...deck, media };
@@ -1313,7 +1326,12 @@
               return deck;
             });
             if (idbSavePromises.length) {
-              Promise.allSettled(idbSavePromises).catch(() => {});
+              Promise.allSettled(idbSavePromises).then(results => {
+                const failures = results.filter(r => r.status === 'rejected');
+                if (failures.length) {
+                  console.warn('[HabitForge] IDB save from cloud media had failures:', failures);
+                }
+              });
             }
           }
         } catch(idbErr) {
