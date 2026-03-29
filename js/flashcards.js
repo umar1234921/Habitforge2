@@ -294,11 +294,17 @@ function _interleaveByKey(cards, keyFn) {
 
 function fcSaveSessionProgress() {
   try {
+    // For interleaved sessions each queue entry carries {id, _deckId} so that
+    // cards from different decks with the same id can be distinguished on resume.
+    const queueIds = _fcInterleaveMode
+      ? _fcStudyQueue.map(c => ({ id: c.id, _deckId: c._deckId }))
+      : _fcStudyQueue.map(c => c.id);
     S.fcSession = {
       deckId:      _fcCurrentDeckId,
       subdeck:     _fcCurrentSubdeck,
+      interleaved: _fcInterleaveMode,
       date:        todayLocalKey(),
-      queueIds:    _fcStudyQueue.map(c => c.id),
+      queueIds,
       idx:         _fcStudyIdx,
       stats:       { ..._fcSessionStats },
       againCounts: { ..._fcSessionAgainCounts },
@@ -314,6 +320,22 @@ function fcLoadSavedSession(deckId, subdeckName) {
     if (
       sess.deckId === deckId &&
       (sess.subdeck || null) === (subdeckName || null) &&
+      sess.date === todayLocalKey() &&
+      sess.idx > 0 &&
+      Array.isArray(sess.queueIds) &&
+      sess.idx < sess.queueIds.length
+    ) return sess;
+  } catch(e) {}
+  return null;
+}
+
+function fcLoadSavedInterleavedSession() {
+  try {
+    const sess = S.fcSession;
+    if (!sess) return null;
+    if (
+      sess.interleaved === true &&
+      sess.deckId === null &&
       sess.date === todayLocalKey() &&
       sess.idx > 0 &&
       Array.isArray(sess.queueIds) &&
@@ -805,6 +827,68 @@ async function startInterleavedSession() {
     }
   } catch (e) { console.warn('[interleave media IDB]', e); }
 
+  // Check for a saved interleaved session from today and offer to resume it
+  const savedSess = fcLoadSavedInterleavedSession();
+  if (savedSess) {
+    // Rebuild the queue from saved {id, _deckId} pairs, looking up each card in
+    // its origin deck so we have the latest SRS data.
+    // Build a composite key map for O(1) lookups instead of O(n*m) nested finds.
+    const cardByKey = {};
+    for (const deck of allDecks) {
+      for (const card of deck.cards) {
+        cardByKey[`${deck.id}:${card.id}`] = { ...card, _deckId: deck.id, _deckName: deck.name };
+      }
+    }
+    const rebuiltQueue = savedSess.queueIds
+      .map(entry => cardByKey[`${entry._deckId}:${entry.id}`] || null)
+      .filter(Boolean);
+    const remaining = rebuiltQueue.length - savedSess.idx;
+    if (remaining > 0) {
+      _fcInterleaveMode = true;
+      _fcCurrentDeckId  = null;
+      _fcCurrentSubdeck = null;
+      $('fc-study-deck-name').textContent = '⇌ Interleaved Study';
+      $('fc-back-to-manage').textContent  = '← DECKS';
+      $('fc-card-wrap').classList.add('fc-hidden');
+      $('fc-session-complete').classList.add('fc-hidden');
+      $('fc-resume-sub').textContent =
+        `You reviewed ${savedSess.idx} of ${rebuiltQueue.length} card${rebuiltQueue.length !== 1 ? 's' : ''} — ${remaining} left to go.`;
+      $('fc-resume-prompt').classList.remove('fc-hidden');
+      fcShowPanel('study');
+
+      const cleanup = () => {
+        $('fc-resume-yes').removeEventListener('click', onResume);
+        $('fc-resume-no').removeEventListener('click', onFresh);
+      };
+      const onResume = () => {
+        cleanup();
+        _fcStudyQueue         = rebuiltQueue;
+        _fcStudyIdx           = savedSess.idx;
+        _fcFlipped            = false;
+        _fcSessionStats       = { ...savedSess.stats };
+        _fcSessionAgainCounts = { ...savedSess.againCounts };
+        $('fc-resume-prompt').classList.add('fc-hidden');
+        $('fc-card-wrap').classList.remove('fc-hidden');
+        renderStudyCard();
+      };
+      const onFresh = () => {
+        cleanup();
+        $('fc-resume-prompt').classList.add('fc-hidden');
+        fcClearSavedSession();
+        _launchFreshInterleavedSession(allDecks);
+      };
+      $('fc-resume-yes').addEventListener('click', onResume);
+      $('fc-resume-no').addEventListener('click', onFresh);
+      return;
+    }
+  }
+
+  fcClearSavedSession();
+  _launchFreshInterleavedSession(allDecks);
+}
+
+// Builds and starts a brand-new interleaved queue from all due cards.
+function _launchFreshInterleavedSession(allDecks) {
   // Gather due cards from every deck, tagging each with its source deck info
   const grouped   = {};
   const deckOrder = [];
@@ -947,9 +1031,7 @@ function gradeCard(g) {
 
   save();
   _fcStudyIdx++;
-  // Session progress persistence is skipped for interleaved sessions because
-  // the queue spans multiple decks and cannot be reliably restored.
-  if (!_fcInterleaveMode) fcSaveSessionProgress();
+  fcSaveSessionProgress();
   renderStudyCard();
 }
 
