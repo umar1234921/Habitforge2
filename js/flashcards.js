@@ -244,9 +244,48 @@ let _fcStudyIdx           = 0;
 let _fcFlipped            = false;
 let _fcSessionStats       = { again: 0, hard: 0, good: 0, easy: 0 };
 let _fcSessionAgainCounts = {}; // tracks per-card re-queue count this session
+let _fcInterleaveMode     = false; // true during a cross-deck interleaved session
 
 function fcCurrentDeck() {
   return (S.flashcardDecks || []).find(d => d.id === _fcCurrentDeckId) || null;
+}
+
+// In interleave mode each card carries a _deckId tag; resolve to its origin deck.
+// Falls back to the current single deck in normal mode.
+function _fcDeckForCard(card) {
+  if (_fcInterleaveMode) {
+    const id = card && card._deckId;
+    return id ? ((S.flashcardDecks || []).find(d => d.id === id) || null) : null;
+  }
+  return fcCurrentDeck();
+}
+
+// Returns a new array of cards interleaved round-robin by the supplied key function.
+// Within each group the cards are shuffled randomly.  Falls back to a plain random
+// shuffle when all cards share the same key (no interleaving possible).
+function _interleaveByKey(cards, keyFn) {
+  const groups = {};
+  const order  = [];
+  for (const card of cards) {
+    const key = keyFn(card);
+    if (!groups[key]) { groups[key] = []; order.push(key); }
+    groups[key].push(card);
+  }
+  if (order.length <= 1) return [...cards].sort(() => Math.random() - 0.5);
+  for (const key of order) groups[key].sort(() => Math.random() - 0.5);
+  const result = [];
+  let active = [...order];
+  while (active.length > 0) {
+    const nextActive = [];
+    for (const key of active) {
+      if (groups[key].length > 0) {
+        result.push(groups[key].shift());
+        if (groups[key].length > 0) nextActive.push(key);
+      }
+    }
+    active = nextActive;
+  }
+  return result;
 }
 
 // ─── SESSION PROGRESS PERSISTENCE ────────────────────────
@@ -638,9 +677,18 @@ function makeFlashcard(front, back) {
 
 // ─── STUDY SESSION ────────────────────────────────────────
 function _fcStartFresh(deck, due) {
-  _fcStudyQueue   = deck.examMode && deck.examDate
-    ? [...due]                              // preserve priority order for exam mode
-    : [...due].sort(() => Math.random() - 0.5);
+  let queue;
+  if (deck.examMode && deck.examDate) {
+    queue = [...due]; // preserve priority order for exam mode
+  } else {
+    // If cards span multiple subdecks, interleave by subdeck so consecutive
+    // cards come from different topics — prevents context-clue exploitation.
+    const subdeckSet = new Set(due.map(c => c.subdeck || ''));
+    queue = subdeckSet.size > 1
+      ? _interleaveByKey(due, c => c.subdeck || '')
+      : [...due].sort(() => Math.random() - 0.5);
+  }
+  _fcStudyQueue         = queue;
   _fcStudyIdx           = 0;
   _fcFlipped            = false;
   _fcSessionStats       = { again: 0, hard: 0, good: 0, easy: 0 };
@@ -649,6 +697,7 @@ function _fcStartFresh(deck, due) {
 }
 
 async function startStudySession(deckId, subdeckName) {
+  _fcInterleaveMode = false;
   _fcCurrentDeckId  = deckId;
   _fcCurrentSubdeck = subdeckName || null;
   const deck = fcCurrentDeck();
@@ -695,6 +744,7 @@ async function startStudySession(deckId, subdeckName) {
       $('fc-resume-sub').textContent =
         `You reviewed ${savedSess.idx} of ${rebuiltQueue.length} card${rebuiltQueue.length !== 1 ? 's' : ''} — ${remaining} left to go.`;
       $('fc-resume-prompt').classList.remove('fc-hidden');
+      $('fc-back-to-manage').textContent = '← DECK';
       fcShowPanel('study');
 
       const onResume = () => {
@@ -726,8 +776,74 @@ async function startStudySession(deckId, subdeckName) {
   }
 
   // Fresh start
+  _fcInterleaveMode = false;
   _fcStartFresh(deckForStudy, due);
   $('fc-study-deck-name').textContent = displayName;
+  $('fc-back-to-manage').textContent  = '← DECK';
+  $('fc-session-complete').classList.add('fc-hidden');
+  $('fc-resume-prompt').classList.add('fc-hidden');
+  $('fc-card-wrap').classList.remove('fc-hidden');
+  fcShowPanel('study');
+  renderStudyCard();
+}
+
+// ─── INTERLEAVED CROSS-DECK SESSION ──────────────────────
+// Collects due cards from every deck, shuffles within each deck, then
+// interleaves them round-robin so consecutive cards come from different decks.
+async function startInterleavedSession() {
+  const allDecks = S.flashcardDecks || [];
+  if (!allDecks.length) { toast('No decks yet — create one first!', 'err'); return; }
+
+  // Load all media in a single IDB pass so card images render correctly
+  try {
+    const allMedia = await MediaDB.loadAll();
+    for (const deck of allDecks) {
+      if (!deck.media) {
+        const media = allMedia[deck.id];
+        if (media && Object.keys(media).length) deck.media = media;
+      }
+    }
+  } catch (e) { console.warn('[interleave media IDB]', e); }
+
+  // Gather due cards from every deck, tagging each with its source deck info
+  const grouped   = {};
+  const deckOrder = [];
+  for (const deck of allDecks) {
+    const due = SRS.dueToday(deck);
+    if (!due.length) continue;
+    grouped[deck.id] = due.map(c => ({ ...c, _deckId: deck.id, _deckName: deck.name }));
+    deckOrder.push(deck.id);
+  }
+
+  if (!deckOrder.length) { toast("No cards due across any deck — you're all caught up! 🎉"); return; }
+
+  // Shuffle within each deck, then interleave across decks round-robin
+  for (const id of deckOrder) grouped[id].sort(() => Math.random() - 0.5);
+
+  const queue = [];
+  let active = [...deckOrder];
+  while (active.length > 0) {
+    const nextActive = [];
+    for (const id of active) {
+      if (grouped[id].length > 0) {
+        queue.push(grouped[id].shift());
+        if (grouped[id].length > 0) nextActive.push(id);
+      }
+    }
+    active = nextActive;
+  }
+
+  _fcInterleaveMode     = true;
+  _fcCurrentDeckId      = null;
+  _fcCurrentSubdeck     = null;
+  _fcStudyQueue         = queue;
+  _fcStudyIdx           = 0;
+  _fcFlipped            = false;
+  _fcSessionStats       = { again: 0, hard: 0, good: 0, easy: 0 };
+  _fcSessionAgainCounts = {};
+
+  $('fc-study-deck-name').textContent = '⇌ Interleaved Study';
+  $('fc-back-to-manage').textContent  = '← DECKS';
   $('fc-session-complete').classList.add('fc-hidden');
   $('fc-resume-prompt').classList.add('fc-hidden');
   $('fc-card-wrap').classList.remove('fc-hidden');
@@ -750,9 +866,11 @@ function renderStudyCard() {
   $('fc-progress-fill').style.width  = (total ? (done / total) * 100 : 0) + '%';
   $('fc-progress-text').textContent  = `${done} / ${total}`;
 
-  // Update the front face immediately — it's hidden behind the back face
-  // while the unflip animation runs, so there is no visual glitch.
-  const deck = fcCurrentDeck();
+  // In interleave mode show which deck the current card belongs to
+  const deck = _fcDeckForCard(card);
+  if (_fcInterleaveMode) {
+    $('fc-study-deck-name').textContent = `⇌ ${card._deckName || 'Interleaved'}`;
+  }
   setCardContent($('fc-front-text'), card.front, deck);
   setCardContent($('fc-front-text-back'), card.front, deck);
 
@@ -776,7 +894,7 @@ function renderStudyCard() {
 }
 
   function updateGradeHints(card) {
-    const deck = fcCurrentDeck();
+    const deck = _fcDeckForCard(card);
     [0, 1, 2, 3].forEach(g => {
       const btn  = document.querySelector(`.fc-grade[data-grade="${g}"]`);
       if (!btn) return;
@@ -798,10 +916,10 @@ function flipCard() {
 }
 
 function gradeCard(g) {
-  const deck = fcCurrentDeck();
-  if (!deck) return;
   const card = _fcStudyQueue[_fcStudyIdx];
   if (!card) return;
+  const deck = _fcDeckForCard(card);
+  if (!deck) return;
 
   const updated = SRS.gradeExamAware({ ...card }, g, deck);
   const idx = deck.cards.findIndex(c => c.id === card.id);
@@ -815,18 +933,23 @@ function gradeCard(g) {
 
   // On "Again", re-insert the card near the end of the queue.
   // Cap per-card re-queues (not total queue length) to avoid runaway.
+  // Preserve interleave-mode deck tags on the re-queued card copy.
   if (g === 0) {
     const timesRequeued = _fcSessionAgainCounts[card.id] || 0;
     if (timesRequeued < 5) {
       const insertAt = Math.min(_fcStudyIdx + 3, _fcStudyQueue.length);
-      _fcStudyQueue.splice(insertAt, 0, { ...updated });
+      const requeued = { ...updated };
+      if (_fcInterleaveMode) { requeued._deckId = card._deckId; requeued._deckName = card._deckName; }
+      _fcStudyQueue.splice(insertAt, 0, requeued);
       _fcSessionAgainCounts[card.id] = timesRequeued + 1;
     }
   }
 
   save();
   _fcStudyIdx++;
-  fcSaveSessionProgress();
+  // Session progress persistence is skipped for interleaved sessions because
+  // the queue spans multiple decks and cannot be reliably restored.
+  if (!_fcInterleaveMode) fcSaveSessionProgress();
   renderStudyCard();
 }
 
@@ -874,9 +997,17 @@ function showSessionComplete() {
       <div class="fc-ds fc-easy-c"><span class="fc-ds-n">${easy}</span><span class="fc-ds-l">easy</span></div>
     </div>
     <div class="fc-done-tip">💡 ${ATOMIC_TIPS[Math.floor(Math.random() * ATOMIC_TIPS.length)]}</div>
-    <button class="btn-primary" id="fc-done-back-btn">← Back to Deck</button>`;
+    <button class="btn-primary" id="fc-done-back-btn">${_fcInterleaveMode ? '← Back to Decks' : '← Back to Deck'}</button>`;
 
-  $('fc-done-back-btn').addEventListener('click', () => openDeckManage(_fcCurrentDeckId));
+  if (_fcInterleaveMode) {
+    $('fc-done-back-btn').addEventListener('click', () => {
+      _fcInterleaveMode = false;
+      fcShowPanel('decks');
+      renderFCDecks();
+    });
+  } else {
+    $('fc-done-back-btn').addEventListener('click', () => openDeckManage(_fcCurrentDeckId));
+  }
 }
 
 // ─── DASHBOARD WIDGET ─────────────────────────────────────
@@ -1430,16 +1561,29 @@ function initFlashcards() {
     renderFCDecks();
   });
   $('fc-study-btn').addEventListener('click', () => startStudySession(_fcCurrentDeckId));
+  $('fc-interleave-deck-btn').addEventListener('click', () => startInterleavedSession());
   $('fc-settings-save-btn').addEventListener('click', saveDeckSettings);
   $('fc-add-single-btn').addEventListener('click', addSingleCard);
   $('fc-bulk-add-btn').addEventListener('click', addBulkCards);
   $('fc-card-back').addEventListener('keydown', e => { if (e.key === 'Enter') addSingleCard(); });
 
   // Study panel
-  $('fc-back-to-manage').addEventListener('click', () => openDeckManage(_fcCurrentDeckId));
+  $('fc-back-to-manage').addEventListener('click', () => {
+    if (_fcInterleaveMode) {
+      _fcInterleaveMode = false;
+      fcShowPanel('decks');
+      renderFCDecks();
+    } else {
+      openDeckManage(_fcCurrentDeckId);
+    }
+  });
   $('fc-flip-btn').addEventListener('click', flipCard);
   document.querySelectorAll('.fc-grade').forEach(btn =>
     btn.addEventListener('click', () => gradeCard(parseInt(btn.dataset.grade))));
+
+  // Interleave all decks button (deck list toolbar)
+  const interleaveAllBtn = $('fc-interleave-all-btn');
+  if (interleaveAllBtn) interleaveAllBtn.addEventListener('click', () => startInterleavedSession());
 
   // Fullscreen
   $('fc-fs-btn').addEventListener('click', toggleFCFullscreen);
