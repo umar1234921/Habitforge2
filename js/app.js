@@ -707,6 +707,10 @@ function initFreeFocus() {
   $('ff-start').addEventListener('click', toggleFreeFocus);
   $('ff-log').addEventListener('click', logFreeFocus);
   $('ff-reset').addEventListener('click', resetFreeFocus);
+  $('ff-fullscreen').addEventListener('click', toggleFreeFocusFullscreen);
+  document.addEventListener('fullscreenchange', updateFreeFocusFullscreenButton);
+  document.addEventListener('webkitfullscreenchange', updateFreeFocusFullscreenButton);
+  updateFreeFocusFullscreenButton();
   updateFreeFocusDisplay();
 }
 
@@ -762,6 +766,70 @@ function resetFreeFocus() {
 function updateFreeFocusDisplay() {
   $('ff-time').textContent = fmtHMS(focusSec);
   updateTimerTopbar();
+}
+
+function getDeepWorkViewEl() {
+  // Free Focus lives inside the Deep Work section (`view-pomodoro`).
+  return $('view-pomodoro');
+}
+
+// Safari webkit fullscreen events can be delayed; 350ms is a short upper bound
+// that keeps the control responsive while still allowing the event to arrive.
+const WEBKIT_FULLSCREEN_TIMEOUT_MS = 350;
+
+function waitForFullscreenChange(action) {
+  return new Promise((resolve) => {
+    let done = false;
+    let timeoutId = null;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      document.removeEventListener('fullscreenchange', finish);
+      document.removeEventListener('webkitfullscreenchange', finish);
+      clearTimeout(timeoutId);
+      resolve();
+    };
+    document.addEventListener('fullscreenchange', finish);
+    document.addEventListener('webkitfullscreenchange', finish);
+    action();
+    timeoutId = setTimeout(finish, WEBKIT_FULLSCREEN_TIMEOUT_MS);
+  });
+}
+
+function isFreeFocusFullscreenActive() {
+  const target = getDeepWorkViewEl();
+  return document.fullscreenElement === target
+    || document.webkitFullscreenElement === target;
+}
+
+function updateFreeFocusFullscreenButton() {
+  const btn = $('ff-fullscreen');
+  if (!btn) return;
+  const active = isFreeFocusFullscreenActive();
+  btn.textContent = active ? 'EXIT' : 'FULL';
+  btn.title = active ? 'Exit fullscreen' : 'Enter fullscreen';
+  btn.setAttribute('aria-label', active ? 'Exit fullscreen' : 'Enter fullscreen');
+}
+
+async function toggleFreeFocusFullscreen() {
+  const view = getDeepWorkViewEl();
+  if (!view) return;
+  try {
+    if (isFreeFocusFullscreenActive()) {
+      // Standard fullscreen APIs return Promises, so we await them directly.
+      if (document.exitFullscreen) await document.exitFullscreen();
+      // Webkit fullscreen APIs are event-driven (no Promise), so we await a short
+      // fullscreenchange/timeout helper instead.
+      else if (document.webkitExitFullscreen) await waitForFullscreenChange(() => document.webkitExitFullscreen());
+      else toast('Fullscreen is not supported in this browser', 'info');
+    } else {
+      if (view.requestFullscreen) await view.requestFullscreen();
+      else if (view.webkitRequestFullscreen) await waitForFullscreenChange(() => view.webkitRequestFullscreen());
+      else toast('Fullscreen is not supported in this browser', 'info');
+    }
+  } catch (e) {
+    toast('Could not toggle fullscreen', 'err');
+  }
 }
 
 // ─── TOPBAR TIMER PILL ────────────────────────────────────
