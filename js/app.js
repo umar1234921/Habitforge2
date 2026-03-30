@@ -773,6 +773,8 @@ function getDeepWorkViewEl() {
   return $('view-pomodoro');
 }
 
+const WEBKIT_FULLSCREEN_TIMEOUT_MS = 350;
+
 function waitForFullscreenChange(action) {
   return new Promise((resolve) => {
     let done = false;
@@ -784,7 +786,7 @@ function waitForFullscreenChange(action) {
       clearTimeout(timeoutId);
       resolve();
     };
-    const timeoutId = setTimeout(finish, 350);
+    const timeoutId = setTimeout(finish, WEBKIT_FULLSCREEN_TIMEOUT_MS);
     document.addEventListener('fullscreenchange', finish);
     document.addEventListener('webkitfullscreenchange', finish);
     action();
