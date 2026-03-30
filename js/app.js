@@ -768,8 +768,13 @@ function updateFreeFocusDisplay() {
   updateTimerTopbar();
 }
 
+function getDeepWorkViewEl() {
+  // Free Focus lives inside the Deep Work section (`view-pomodoro`).
+  return $('view-pomodoro');
+}
+
 function isFreeFocusFullscreenActive() {
-  const target = $('view-pomodoro');
+  const target = getDeepWorkViewEl();
   return document.fullscreenElement === target
     || document.webkitFullscreenElement === target;
 }
@@ -784,7 +789,7 @@ function updateFreeFocusFullscreenButton() {
 }
 
 async function toggleFreeFocusFullscreen() {
-  const view = $('view-pomodoro');
+  const view = getDeepWorkViewEl();
   if (!view) return;
   try {
     if (isFreeFocusFullscreenActive()) {
