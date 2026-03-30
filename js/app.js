@@ -779,6 +779,7 @@ function updateFreeFocusFullscreenButton() {
   const active = isFreeFocusFullscreenActive();
   btn.textContent = active ? '🗗' : '⛶';
   btn.title = active ? 'Exit fullscreen' : 'Enter fullscreen';
+  btn.setAttribute('aria-label', active ? 'Exit fullscreen' : 'Enter fullscreen');
 }
 
 async function toggleFreeFocusFullscreen() {
@@ -795,8 +796,6 @@ async function toggleFreeFocusFullscreen() {
     }
   } catch (e) {
     toast('Could not toggle fullscreen', 'err');
-  } finally {
-    updateFreeFocusFullscreenButton();
   }
 }
 
