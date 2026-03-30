@@ -782,16 +782,20 @@ function updateFreeFocusFullscreenButton() {
   btn.setAttribute('aria-label', active ? 'Exit fullscreen' : 'Enter fullscreen');
 }
 
+function runFullscreenOp(op) {
+  return Promise.resolve(op());
+}
+
 async function toggleFreeFocusFullscreen() {
   const view = $('view-pomodoro');
   if (!view) return;
   try {
     if (isFreeFocusFullscreenActive()) {
       if (document.exitFullscreen) await document.exitFullscreen();
-      else if (document.webkitExitFullscreen) await document.webkitExitFullscreen();
+      else if (document.webkitExitFullscreen) await runFullscreenOp(() => document.webkitExitFullscreen());
     } else {
       if (view.requestFullscreen) await view.requestFullscreen();
-      else if (view.webkitRequestFullscreen) await view.webkitRequestFullscreen();
+      else if (view.webkitRequestFullscreen) await runFullscreenOp(() => view.webkitRequestFullscreen());
       else toast('Fullscreen is not supported in this browser', 'info');
     }
   } catch (e) {
