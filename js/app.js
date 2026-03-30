@@ -778,7 +778,7 @@ function updateFreeFocusFullscreenButton() {
   const btn = $('ff-fullscreen');
   if (!btn) return;
   const active = isFreeFocusFullscreenActive();
-  btn.textContent = active ? '🗗' : '⛶';
+  btn.textContent = active ? 'EXIT' : 'FULL';
   btn.title = active ? 'Exit fullscreen' : 'Enter fullscreen';
   btn.setAttribute('aria-label', active ? 'Exit fullscreen' : 'Enter fullscreen');
 }
