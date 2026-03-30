@@ -769,8 +769,9 @@ function updateFreeFocusDisplay() {
 }
 
 function isFreeFocusFullscreenActive() {
-  return document.fullscreenElement === $('view-pomodoro')
-    || document.webkitFullscreenElement === $('view-pomodoro');
+  const target = $('view-pomodoro');
+  return document.fullscreenElement === target
+    || document.webkitFullscreenElement === target;
 }
 
 function updateFreeFocusFullscreenButton() {
@@ -782,20 +783,16 @@ function updateFreeFocusFullscreenButton() {
   btn.setAttribute('aria-label', active ? 'Exit fullscreen' : 'Enter fullscreen');
 }
 
-function runFullscreenOp(op) {
-  return Promise.resolve(op());
-}
-
 async function toggleFreeFocusFullscreen() {
   const view = $('view-pomodoro');
   if (!view) return;
   try {
     if (isFreeFocusFullscreenActive()) {
       if (document.exitFullscreen) await document.exitFullscreen();
-      else if (document.webkitExitFullscreen) await runFullscreenOp(() => document.webkitExitFullscreen());
+      else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
     } else {
       if (view.requestFullscreen) await view.requestFullscreen();
-      else if (view.webkitRequestFullscreen) await runFullscreenOp(() => view.webkitRequestFullscreen());
+      else if (view.webkitRequestFullscreen) view.webkitRequestFullscreen();
       else toast('Fullscreen is not supported in this browser', 'info');
     }
   } catch (e) {
