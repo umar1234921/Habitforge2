@@ -769,8 +769,8 @@ function updateFreeFocusDisplay() {
 }
 
 function getDeepWorkViewEl() {
-  // Free Focus lives inside the Deep Work section (`view-pomodoro`).
-  return $('view-pomodoro');
+  // In fullscreen, only the Free Focus stopwatch card should be shown.
+  return $('ff-fullscreen-shell');
 }
 
 // Safari webkit fullscreen events can be delayed; 350ms is a short upper bound
