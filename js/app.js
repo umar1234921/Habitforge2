@@ -773,6 +773,24 @@ function getDeepWorkViewEl() {
   return $('view-pomodoro');
 }
 
+function waitForFullscreenChange(action) {
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      document.removeEventListener('fullscreenchange', finish);
+      document.removeEventListener('webkitfullscreenchange', finish);
+      clearTimeout(timeoutId);
+      resolve();
+    };
+    const timeoutId = setTimeout(finish, 350);
+    document.addEventListener('fullscreenchange', finish);
+    document.addEventListener('webkitfullscreenchange', finish);
+    action();
+  });
+}
+
 function isFreeFocusFullscreenActive() {
   const target = getDeepWorkViewEl();
   return document.fullscreenElement === target
@@ -794,10 +812,10 @@ async function toggleFreeFocusFullscreen() {
   try {
     if (isFreeFocusFullscreenActive()) {
       if (document.exitFullscreen) await document.exitFullscreen();
-      else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+      else if (document.webkitExitFullscreen) await waitForFullscreenChange(() => document.webkitExitFullscreen());
     } else {
       if (view.requestFullscreen) await view.requestFullscreen();
-      else if (view.webkitRequestFullscreen) view.webkitRequestFullscreen();
+      else if (view.webkitRequestFullscreen) await waitForFullscreenChange(() => view.webkitRequestFullscreen());
       else toast('Fullscreen is not supported in this browser', 'info');
     }
   } catch (e) {
