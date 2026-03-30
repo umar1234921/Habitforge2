@@ -694,6 +694,7 @@ function updateDWStats() {
 
 // ─── FREE FOCUS STOPWATCH ─────────────────────────────────
 let focusSec = 0, focusRunning = false, focusTimer = null;
+const FREE_FOCUS_RING_CIRC = 2 * Math.PI * 52;
 
 function fmtHMS(sec) {
   const h = Math.floor(sec / 3600);
@@ -710,6 +711,7 @@ function initFreeFocus() {
   $('ff-fullscreen').addEventListener('click', toggleFreeFocusFullscreen);
   document.addEventListener('fullscreenchange', updateFreeFocusFullscreenButton);
   document.addEventListener('webkitfullscreenchange', updateFreeFocusFullscreenButton);
+  syncFreeFocusButtons();
   updateFreeFocusFullscreenButton();
   updateFreeFocusDisplay();
 }
@@ -717,16 +719,15 @@ function initFreeFocus() {
 function toggleFreeFocus() {
   if (focusRunning) {
     clearInterval(focusTimer); focusRunning = false;
-    $('ff-start').textContent = '▶ Resume';
     $('ff-status').textContent = 'Paused — log or resume';
     $('ff-log').disabled = false;
   } else {
     focusRunning = true;
-    $('ff-start').textContent = '⏸ Pause';
     $('ff-status').textContent = '🔥 Focus active — stay off your phone!';
     $('ff-log').disabled = true;
     focusTimer = setInterval(tickFreeFocus, 1000);
   }
+  syncFreeFocusButtons();
 }
 
 function tickFreeFocus() {
@@ -749,22 +750,57 @@ function logFreeFocus() {
   save(); renderFocusLog(); updateDWStats(); renderDashStats();
   toast(`🌲 ${mins}m logged! +${Math.max(1, Math.floor(mins/5))} XP`);
   focusSec = 0;
-  $('ff-start').textContent = '▶ Start';
   $('ff-log').disabled = true;
   $('ff-status').textContent = 'Session logged ✓';
+  syncFreeFocusButtons();
   updateFreeFocusDisplay();
 }
 
 function resetFreeFocus() {
   clearInterval(focusTimer); focusRunning = false; focusSec = 0;
-  $('ff-start').textContent = '▶ Start';
   $('ff-log').disabled = true;
   $('ff-status').textContent = 'Ready to focus';
+  syncFreeFocusButtons();
   updateFreeFocusDisplay();
+}
+
+function updateFreeFocusRing() {
+  const ring = $('ff-ring-prog');
+  if (!ring) return;
+  ring.style.strokeDasharray = `${FREE_FOCUS_RING_CIRC}`;
+  const minuteProgress = (focusSec % 60) / 60;
+  ring.style.strokeDashoffset = `${FREE_FOCUS_RING_CIRC * (1 - minuteProgress)}`;
+}
+
+function syncFreeFocusButtons() {
+  const startBtn = $('ff-start');
+  const resetBtn = $('ff-reset');
+  const fullscreenActive = isFreeFocusFullscreenActive();
+  if (startBtn) {
+    if (fullscreenActive) {
+      startBtn.textContent = focusRunning ? '⏸' : '▶';
+      startBtn.setAttribute('aria-label', focusRunning ? 'Pause' : (focusSec > 0 ? 'Resume' : 'Start'));
+      startBtn.title = focusRunning ? 'Pause' : (focusSec > 0 ? 'Resume' : 'Start');
+    } else {
+      startBtn.textContent = focusRunning ? '⏸ Pause' : (focusSec > 0 ? '▶ Resume' : '▶ Start');
+      startBtn.removeAttribute('aria-label');
+      startBtn.removeAttribute('title');
+    }
+  }
+  if (resetBtn && fullscreenActive) {
+    resetBtn.textContent = '↺';
+    resetBtn.setAttribute('aria-label', 'Reset');
+    resetBtn.title = 'Reset';
+  } else if (resetBtn) {
+    resetBtn.textContent = '↺';
+    resetBtn.removeAttribute('aria-label');
+    resetBtn.removeAttribute('title');
+  }
 }
 
 function updateFreeFocusDisplay() {
   $('ff-time').textContent = fmtHMS(focusSec);
+  updateFreeFocusRing();
   updateTimerTopbar();
 }
 
@@ -806,9 +842,10 @@ function updateFreeFocusFullscreenButton() {
   const btn = $('ff-fullscreen');
   if (!btn) return;
   const active = isFreeFocusFullscreenActive();
-  btn.textContent = active ? 'EXIT' : 'FULL';
+  btn.textContent = active ? '✕' : 'FULL';
   btn.title = active ? 'Exit fullscreen' : 'Enter fullscreen';
   btn.setAttribute('aria-label', active ? 'Exit fullscreen' : 'Enter fullscreen');
+  syncFreeFocusButtons();
 }
 
 async function toggleFreeFocusFullscreen() {

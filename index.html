@@ -288,7 +288,15 @@
             <div class="card" id="ff-fullscreen-shell">
               <div class="card-lbl">FREE FOCUS STOPWATCH <span class="card-lbl-sub">— forest mode</span></div>
               <div class="ff-wrap">
-                <div class="ff-time" id="ff-time">00:00</div>
+                <div class="ff-ring-wrap">
+                  <svg class="ff-ring-svg" viewBox="0 0 120 120" aria-hidden="true">
+                    <circle class="ff-ring-track" cx="60" cy="60" r="52"></circle>
+                    <circle class="ff-ring-prog" id="ff-ring-prog" cx="60" cy="60" r="52"></circle>
+                  </svg>
+                  <div class="ff-ring-inner">
+                    <div class="ff-time" id="ff-time">00:00</div>
+                  </div>
+                </div>
                 <div class="ff-status" id="ff-status">Ready to focus</div>
                 <input class="field-in ff-task-in" id="ff-task-in" placeholder="What are you working on?"/>
                 <div class="ff-ctrl">
@@ -960,17 +968,19 @@
               </div>
             </div>
 
-            <!-- Show answer button -->
-            <button class="btn-primary fc-flip-btn" id="fc-flip-btn">SHOW ANSWER <span class="kbd">Space</span></button>
+            <div class="fc-action-zone">
+              <!-- Show answer button -->
+              <button class="btn-primary fc-flip-btn" id="fc-flip-btn">SHOW ANSWER <span class="kbd">Space</span></button>
 
-            <!-- Grade buttons -->
-            <div class="fc-grade-btns fc-hidden" id="fc-grade-btns">
-              <button class="fc-grade fc-again" data-grade="0">Again<span class="fc-grade-interval"></span></button>
-              <button class="fc-grade fc-hard"  data-grade="1">Hard<span class="fc-grade-interval"></span></button>
-              <button class="fc-grade fc-good"  data-grade="2">Good<span class="fc-grade-interval"></span></button>
-              <button class="fc-grade fc-easy"  data-grade="3">Easy<span class="fc-grade-interval"></span></button>
+              <!-- Grade buttons -->
+              <div class="fc-grade-btns fc-hidden" id="fc-grade-btns">
+                <button class="fc-grade fc-again" data-grade="0">Again<span class="fc-grade-interval"></span></button>
+                <button class="fc-grade fc-hard"  data-grade="1">Hard<span class="fc-grade-interval"></span></button>
+                <button class="fc-grade fc-good"  data-grade="2">Good<span class="fc-grade-interval"></span></button>
+                <button class="fc-grade fc-easy"  data-grade="3">Easy<span class="fc-grade-interval"></span></button>
+              </div>
+              <div class="fc-kbd-hint"><span class="kbd">1</span> Again &nbsp; <span class="kbd">2</span> Hard &nbsp; <span class="kbd">3</span> Good &nbsp; <span class="kbd">4</span> Easy</div>
             </div>
-            <div class="fc-kbd-hint"><span class="kbd">1</span> Again &nbsp; <span class="kbd">2</span> Hard &nbsp; <span class="kbd">3</span> Good &nbsp; <span class="kbd">4</span> Easy</div>
           </div>
 
           <!-- Session complete screen -->
