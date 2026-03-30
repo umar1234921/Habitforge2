@@ -773,11 +773,13 @@ function getDeepWorkViewEl() {
   return $('view-pomodoro');
 }
 
+// Safari webkit fullscreen events can be delayed; brief fallback keeps UI responsive.
 const WEBKIT_FULLSCREEN_TIMEOUT_MS = 350;
 
 function waitForFullscreenChange(action) {
   return new Promise((resolve) => {
     let done = false;
+    let timeoutId = null;
     const finish = () => {
       if (done) return;
       done = true;
@@ -786,10 +788,10 @@ function waitForFullscreenChange(action) {
       clearTimeout(timeoutId);
       resolve();
     };
-    const timeoutId = setTimeout(finish, WEBKIT_FULLSCREEN_TIMEOUT_MS);
     document.addEventListener('fullscreenchange', finish);
     document.addEventListener('webkitfullscreenchange', finish);
     action();
+    timeoutId = setTimeout(finish, WEBKIT_FULLSCREEN_TIMEOUT_MS);
   });
 }
 
@@ -815,6 +817,7 @@ async function toggleFreeFocusFullscreen() {
     if (isFreeFocusFullscreenActive()) {
       if (document.exitFullscreen) await document.exitFullscreen();
       else if (document.webkitExitFullscreen) await waitForFullscreenChange(() => document.webkitExitFullscreen());
+      else toast('Fullscreen is not supported in this browser', 'info');
     } else {
       if (view.requestFullscreen) await view.requestFullscreen();
       else if (view.webkitRequestFullscreen) await waitForFullscreenChange(() => view.webkitRequestFullscreen());
