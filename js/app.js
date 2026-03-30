@@ -788,10 +788,10 @@ async function toggleFreeFocusFullscreen() {
   try {
     if (isFreeFocusFullscreenActive()) {
       if (document.exitFullscreen) await document.exitFullscreen();
-      else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+      else if (document.webkitExitFullscreen) await document.webkitExitFullscreen();
     } else {
       if (view.requestFullscreen) await view.requestFullscreen();
-      else if (view.webkitRequestFullscreen) view.webkitRequestFullscreen();
+      else if (view.webkitRequestFullscreen) await view.webkitRequestFullscreen();
       else toast('Fullscreen is not supported in this browser', 'info');
     }
   } catch (e) {
