@@ -773,7 +773,8 @@ function getDeepWorkViewEl() {
   return $('view-pomodoro');
 }
 
-// Safari webkit fullscreen events can be delayed; brief fallback keeps UI responsive.
+// Safari webkit fullscreen events can be delayed; 350ms is a short upper bound
+// that keeps the control responsive while still allowing the event to arrive.
 const WEBKIT_FULLSCREEN_TIMEOUT_MS = 350;
 
 function waitForFullscreenChange(action) {
@@ -815,7 +816,10 @@ async function toggleFreeFocusFullscreen() {
   if (!view) return;
   try {
     if (isFreeFocusFullscreenActive()) {
+      // Standard fullscreen APIs return Promises, so we await them directly.
       if (document.exitFullscreen) await document.exitFullscreen();
+      // Webkit fullscreen APIs are event-driven (no Promise), so we await a short
+      // fullscreenchange/timeout helper instead.
       else if (document.webkitExitFullscreen) await waitForFullscreenChange(() => document.webkitExitFullscreen());
       else toast('Fullscreen is not supported in this browser', 'info');
     } else {
