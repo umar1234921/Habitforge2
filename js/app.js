@@ -707,6 +707,10 @@ function initFreeFocus() {
   $('ff-start').addEventListener('click', toggleFreeFocus);
   $('ff-log').addEventListener('click', logFreeFocus);
   $('ff-reset').addEventListener('click', resetFreeFocus);
+  $('ff-fullscreen').addEventListener('click', toggleFreeFocusFullscreen);
+  document.addEventListener('fullscreenchange', updateFreeFocusFullscreenButton);
+  document.addEventListener('webkitfullscreenchange', updateFreeFocusFullscreenButton);
+  updateFreeFocusFullscreenButton();
   updateFreeFocusDisplay();
 }
 
@@ -762,6 +766,38 @@ function resetFreeFocus() {
 function updateFreeFocusDisplay() {
   $('ff-time').textContent = fmtHMS(focusSec);
   updateTimerTopbar();
+}
+
+function isFreeFocusFullscreenActive() {
+  return document.fullscreenElement === $('view-pomodoro')
+    || document.webkitFullscreenElement === $('view-pomodoro');
+}
+
+function updateFreeFocusFullscreenButton() {
+  const btn = $('ff-fullscreen');
+  if (!btn) return;
+  const active = isFreeFocusFullscreenActive();
+  btn.textContent = active ? '🗗' : '⛶';
+  btn.title = active ? 'Exit fullscreen' : 'Enter fullscreen';
+}
+
+async function toggleFreeFocusFullscreen() {
+  const view = $('view-pomodoro');
+  if (!view) return;
+  try {
+    if (isFreeFocusFullscreenActive()) {
+      if (document.exitFullscreen) await document.exitFullscreen();
+      else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+    } else {
+      if (view.requestFullscreen) await view.requestFullscreen();
+      else if (view.webkitRequestFullscreen) view.webkitRequestFullscreen();
+      else toast('Fullscreen is not supported in this browser', 'info');
+    }
+  } catch (e) {
+    toast('Could not toggle fullscreen', 'err');
+  } finally {
+    updateFreeFocusFullscreenButton();
+  }
 }
 
 // ─── TOPBAR TIMER PILL ────────────────────────────────────
