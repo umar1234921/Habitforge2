@@ -2998,7 +2998,7 @@ body::before {
 }
 @media (max-width: 640px) {
   .fc-card-face { padding: 24px 20px; min-height: 160px; }
-  .fc-card-q { font-size: clamp(22px, 6vw, 30px); }
+  .fc-card-q { font-size: clamp(22px, 6vw, 34px); }
   .fc-card-a { font-size: 14px; }
   .fc-grade { padding: 10px 4px; font-size: 12px; }
   .fc-grade-btns { gap: 6px; }

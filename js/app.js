@@ -793,8 +793,8 @@ function syncFreeFocusButtons() {
     resetBtn.title = 'Reset';
   } else if (resetBtn) {
     resetBtn.textContent = '↺';
-    resetBtn.removeAttribute('aria-label');
-    resetBtn.removeAttribute('title');
+    resetBtn.setAttribute('aria-label', 'Reset');
+    resetBtn.title = 'Reset';
   }
 }
 
