@@ -1,1 +1,1 @@
-window.HF_GEMINI_API_KEY = 'AIzaSyAtHH6db2DBJ_hz7zjlYE7IYw94gvwODC4';
+window.HF_GEMINI_API_KEY = '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';
