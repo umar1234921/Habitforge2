@@ -460,6 +460,7 @@ async function explainCurrentCardWithAi() {
     );
     if (!res.ok) throw new Error(`Gemini request failed (${res.status})`);
     const data = await res.json();
+    console.log("Gemini API Response:", data);
     const text = fcExtractGeminiText(data);
     if (!text) throw new Error('Empty tutor response');
 
