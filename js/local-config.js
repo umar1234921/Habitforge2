@@ -1,0 +1,1 @@
+window.HF_GEMINI_API_KEY = 'AIzaSyCWQJy2ZYLzcqNOBRRz2ojyIo1y2eYrjhE';
