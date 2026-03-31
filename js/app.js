@@ -92,7 +92,7 @@ function load() {
   if (!Array.isArray(S.focusLog)) S.focusLog = [];
   if (!Array.isArray(S.errorLog)) S.errorLog = [];
   if (!Array.isArray(S.fcSessionTrash)) S.fcSessionTrash = [];
-  if (typeof S.cloudSyncEnabled !== 'boolean') S.cloudSyncEnabled = !IS_DESKTOP_APP;
+  if (S.cloudSyncEnabled == null) S.cloudSyncEnabled = !IS_DESKTOP_APP;
   if (!S.cloudSync || typeof S.cloudSync !== 'object') {
     S.cloudSync = { state: 'idle', retryAt: null, lastError: null, lastSuccessAt: null };
   }

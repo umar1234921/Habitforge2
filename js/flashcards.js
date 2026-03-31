@@ -413,9 +413,9 @@ function markSessionDeckDeleted(deckId, deckName) {
   };
 }
 
-function clampSessionProgressIdx(idx, length) {
+function clampSessionResumeIdx(idx, length) {
   const safeIdx = Number.isFinite(idx) ? idx : 0;
-  return Math.max(0, Math.min(safeIdx, Math.max(0, length)));
+  return Math.max(0, Math.min(safeIdx, Math.max(0, length - 1)));
 }
 
 function fcSaveSessionProgress() {
@@ -924,8 +924,9 @@ async function startStudySession(deckId, subdeckName) {
     const rebuiltQueue = savedSess.queueIds.map(id => cardMap[id]).filter(Boolean);
     const totalQueued  = Array.isArray(savedSess.queueIds) ? savedSess.queueIds.length : 0;
     const missingCardCount = Math.max(0, totalQueued - rebuiltQueue.length);
-    const progressIdx = clampSessionProgressIdx(savedSess.idx, rebuiltQueue.length);
-    const resumeIdx   = Math.min(progressIdx, Math.max(0, rebuiltQueue.length - 1));
+    const rawIdx      = Number.isFinite(savedSess.idx) ? savedSess.idx : 0;
+    const progressIdx = Math.min(Math.max(0, rawIdx), rebuiltQueue.length);
+    const resumeIdx   = clampSessionResumeIdx(rawIdx, rebuiltQueue.length);
     const remaining   = Math.max(0, rebuiltQueue.length - progressIdx);
     if (remaining > 0) {
       $('fc-study-deck-name').textContent = displayName;
@@ -1023,8 +1024,9 @@ async function startInterleavedSession() {
       .filter(Boolean);
     const totalQueued  = Array.isArray(savedSess.queueIds) ? savedSess.queueIds.length : 0;
     const missingCardCount = Math.max(0, totalQueued - rebuiltQueue.length);
-    const progressIdx = clampSessionProgressIdx(savedSess.idx, rebuiltQueue.length);
-    const resumeIdx   = Math.min(progressIdx, Math.max(0, rebuiltQueue.length - 1));
+    const rawIdx      = Number.isFinite(savedSess.idx) ? savedSess.idx : 0;
+    const progressIdx = Math.min(Math.max(0, rawIdx), rebuiltQueue.length);
+    const resumeIdx   = clampSessionResumeIdx(rawIdx, rebuiltQueue.length);
     const remaining   = Math.max(0, rebuiltQueue.length - progressIdx);
     if (remaining > 0) {
       _fcInterleaveMode = true;

@@ -63,6 +63,7 @@ const _localSave = window.save;
 if (typeof _localSave === 'function') {
   window.save = function(options = {}) {
     _localSave(options);
+    if (options.skipCloudSync) return;
     if (isCloudSyncEnabled()) requestCloudSave();
   };
 }
@@ -276,10 +277,7 @@ async function fbLoadMedia(uid) {
     const deckId = deckDoc.id;
     const meta = deckDoc.data() || {};
     let chunkCount = Number(meta.chunkCount);
-    if (!Number.isFinite(chunkCount)) {
-      chunkCount = 0;
-    } else if (chunkCount < 0) {
-      console.warn('[HabitForge] Invalid negative chunkCount metadata for deck:', deckId, chunkCount);
+    if (!Number.isFinite(chunkCount) || chunkCount < 0) {
       chunkCount = 0;
     }
     const media = {};
@@ -461,8 +459,8 @@ async function fbLoad(uid) {
           const mergedById = new Map([...S.flashcardDecks, ...orphanedLocalDecks].map(d => [d.id, d]));
           S.flashcardDecks = [...mergedById.values()];
           if (typeof save === 'function') save();
-        } else if (typeof _localSave === 'function') {
-          _localSave({ bumpRevision: false });
+        } else if (typeof save === 'function') {
+          save({ bumpRevision: false, skipCloudSync: true });
         }
 
         renderDashboard();
