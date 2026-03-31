@@ -77,9 +77,11 @@ function todayLocalKey() {
 // Duration of the card flip CSS transition (must match .fc-card-inner transition in style.css)
 const FC_FLIP_DURATION_MS = 300;
 const FC_AI_TUTOR_TIMEOUT_MS = 15000;
-const FC_AI_TUTOR_MODEL = 'gemini-2.0-flash';
+const FC_AI_TUTOR_MODEL = 'google/gemini-2.5-flash:free';
 const FC_AI_TUTOR_TEMPERATURE = 0.3;
 const FC_AI_TUTOR_MAX_TOKENS = 2500;
+const FC_OPENROUTER_REFERER = 'https://your-app.example.com';
+const FC_OPENROUTER_TITLE = 'HabitForge2 Flashcards';
 const FC_SUBJECT_CTX_MAX_TOPICS = 6;
 const FC_SUBJECT_CTX_MAX_POINTS = 3;
 
@@ -334,14 +336,22 @@ function fcPrepareAiTutor(card, deck) {
   }
 }
 
-function fcGeminiApiKey() {
-  return (window.HF_GEMINI_API_KEY || window.GEMINI_API_KEY || window.hfGeminiApiKey || '').trim();
+function fcOpenRouterApiKey() {
+  return (
+    window.HF_OPENROUTER_API_KEY ||
+    window.OPENROUTER_API_KEY ||
+    window.hfOpenRouterApiKey ||
+    window.HF_GEMINI_API_KEY ||
+    window.GEMINI_API_KEY ||
+    window.hfGeminiApiKey ||
+    ''
+  ).trim();
 }
 
 async function fcEnsureAiConfigLoaded() {
   if (_fcAiConfigLoadTried) return;
   _fcAiConfigLoadTried = true;
-  if (fcGeminiApiKey()) return;
+  if (fcOpenRouterApiKey()) return;
   try {
     await loadScript('/js/local-config.js');
   } catch (e) {
@@ -391,11 +401,19 @@ function fcBuildTutorPrompt(card, deck) {
 
 function fcExtractGeminiText(payload) {
   try {
-    const parts = payload && payload.candidates && payload.candidates[0] &&
-      payload.candidates[0].content && Array.isArray(payload.candidates[0].content.parts)
-      ? payload.candidates[0].content.parts
-      : [];
-    return parts.map(p => (p && p.text) ? p.text : '').join('\n').trim();
+    const content = payload && payload.choices && payload.choices[0] &&
+      payload.choices[0].message
+      ? payload.choices[0].message.content
+      : '';
+    if (typeof content === 'string') return content.trim();
+    if (Array.isArray(content)) {
+      return content.map(part => {
+        if (typeof part === 'string') return part;
+        if (part && typeof part.text === 'string') return part.text;
+        return '';
+      }).join('\n').trim();
+    }
+    return '';
   } catch (e) {
     return '';
   }
@@ -417,10 +435,10 @@ async function explainCurrentCardWithAi() {
   if (_fcAiTutorInFlight) return;
 
   await fcEnsureAiConfigLoaded();
-  const apiKey = fcGeminiApiKey();
+  const apiKey = fcOpenRouterApiKey();
   if (!apiKey) {
-    fcSetAiStatus('AI Tutor unavailable: Gemini API key not found.');
-    toast('Add HF_GEMINI_API_KEY in /js/local-config.js (see README).', 'info');
+    fcSetAiStatus('AI Tutor unavailable: OpenRouter API key not found.');
+    toast('Add HF_OPENROUTER_API_KEY in /js/local-config.js (see README).', 'info');
     return;
   }
 
@@ -436,31 +454,27 @@ async function explainCurrentCardWithAi() {
 
   try {
     const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${FC_AI_TUTOR_MODEL}:generateContent?key=${apiKey}`,
+      'https://openrouter.ai/api/v1/chat/completions',
       {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+          'HTTP-Referer': FC_OPENROUTER_REFERER,
+          'X-Title': FC_OPENROUTER_TITLE,
         },
         body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: {
-            temperature: FC_AI_TUTOR_TEMPERATURE,
-            maxOutputTokens: FC_AI_TUTOR_MAX_TOKENS,
-          },
-          safetySettings: [
-            { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_ONLY_HIGH' },
-            { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_ONLY_HIGH' },
-            { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_ONLY_HIGH' },
-            { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_ONLY_HIGH' },
-          ],
+          model: FC_AI_TUTOR_MODEL,
+          messages: [{ role: 'user', content: prompt }],
+          temperature: FC_AI_TUTOR_TEMPERATURE,
+          max_tokens: FC_AI_TUTOR_MAX_TOKENS,
         }),
         signal: controller.signal,
       }
     );
-    if (!res.ok) throw new Error(`Gemini request failed (${res.status})`);
+    if (!res.ok) throw new Error(`OpenRouter request failed (${res.status})`);
     const data = await res.json();
-    console.log("Gemini API Response:", data);
+    console.log("OpenRouter API Response:", data);
     const text = fcExtractGeminiText(data);
     if (!text) throw new Error('Empty tutor response');
 
