@@ -8,6 +8,7 @@ const CLOUD_SAVE_BASE_BACKOFF_MS = 2000;
 const CLOUD_SAVE_MAX_BACKOFF_MS = 5 * 60 * 1000;
 const MAX_CIRCUIT_FAILURE_COUNT = 8;
 const MAX_MEDIA_CHUNK_CHARS = 700000;
+const MAX_MEDIA_DECK_SAVE_ATTEMPTS = 3;
 
 const CLOUD_SYNC_STATES = {
   CLOSED: 'closed',
@@ -48,6 +49,7 @@ let GoogleAuthProvider = null;
 let onAuthStateChanged = null;
 
 const mediaSyncSignatures = new Map();
+const mediaSyncFailures = new Map();
 
 const firebaseConfig = {
   apiKey: "AIzaSyDWBU7TfHB0fJvqEY4VT_9vtQ8VHqyvIf8",
@@ -355,20 +357,22 @@ async function withRetry(fn, maxRetries = 3, baseDelayMs = 1000) {
 
 async function fbSaveMedia(uid, decks) {
   if (!uid || !Array.isArray(decks)) return;
-  const failedDeckIds = [];
+  const newlyFailedDeckIds = [];
   for (const deck of decks) {
     if (!deck || !deck.id || !deck.media || typeof deck.media !== 'object' || Array.isArray(deck.media)) continue;
     const names = Object.keys(deck.media);
     if (!names.length) continue;
     const sig = mediaSignature(deck.media);
     if (mediaSyncSignatures.get(deck.id) === sig) continue;
+    // Skip re-attempting deck media when this exact payload signature already
+    // exhausted its MAX_MEDIA_DECK_SAVE_ATTEMPTS budget in a previous save cycle.
+    if (mediaSyncFailures.get(deck.id) === sig) continue;
 
     const chunks = splitMediaChunks(deck.media);
     let pendingChunkIndexes = chunks.map((_, i) => i);
     let attempt = 1;
-    const retryStartAt = Date.now();
     let lastChunkError = null;
-    while (pendingChunkIndexes.length) {
+    while (pendingChunkIndexes.length && attempt <= MAX_MEDIA_DECK_SAVE_ATTEMPTS) {
       const failedChunkIndexes = [];
       for (const i of pendingChunkIndexes) {
         try {
@@ -387,7 +391,7 @@ async function fbSaveMedia(uid, decks) {
         }
       }
       if (!failedChunkIndexes.length) break;
-      if (Date.now() - retryStartAt > CLOUD_SAVE_MAX_BACKOFF_MS) {
+      if (attempt >= MAX_MEDIA_DECK_SAVE_ATTEMPTS) {
         pendingChunkIndexes = failedChunkIndexes;
         break;
       }
@@ -398,7 +402,8 @@ async function fbSaveMedia(uid, decks) {
     }
 
     if (pendingChunkIndexes.length) {
-      failedDeckIds.push(deck.id);
+      if (mediaSyncFailures.get(deck.id) !== sig) newlyFailedDeckIds.push(deck.id);
+      mediaSyncFailures.set(deck.id, sig);
       console.warn(`[HabitForge] Media cloud save failed for deck ${deck.id}; failed chunks: ${pendingChunkIndexes.join(', ')}`);
       if (lastChunkError) console.warn('[HabitForge] Last media chunk error:', lastChunkError);
       continue;
@@ -412,12 +417,10 @@ async function fbSaveMedia(uid, decks) {
       )
     );
     mediaSyncSignatures.set(deck.id, sig);
+    mediaSyncFailures.delete(deck.id);
   }
-  if (failedDeckIds.length) {
-    throw Object.assign(
-      new Error('Media cloud save failed for one or more decks'),
-      { failedDeckIds }
-    );
+  if (newlyFailedDeckIds.length && typeof toast === 'function') {
+    toast(`Cloud media upload failed for ${newlyFailedDeckIds.length} deck(s) after ${MAX_MEDIA_DECK_SAVE_ATTEMPTS} attempts. Future uploads are skipped until that deck changes. Check your connection or edit the deck to retry.`, 'info');
   }
 }
 
