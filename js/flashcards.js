@@ -436,12 +436,11 @@ async function explainCurrentCardWithAi() {
 
   try {
     const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${FC_AI_TUTOR_MODEL}:generateContent`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${FC_AI_TUTOR_MODEL}:generateContent=${apiKey}`,
       {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-goog-api-key': apiKey,
         },
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
