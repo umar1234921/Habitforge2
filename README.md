@@ -8,6 +8,13 @@ npm install
 npm run web:dev
 ```
 
+### Optional: AI Tutor mode (Gemini)
+Create a local gitignored file at `/js/local-config.js`:
+```js
+window.HF_GEMINI_API_KEY = 'your-gemini-api-key';
+```
+Then use **AI Tutor Mode** inside flashcard study to get beginner-friendly explanations with deck + GCSE context.
+
 Cloud sync is optional and can be enabled with the sidebar toggle
 ("Enable Cloud Sync") when you want to sync.
 

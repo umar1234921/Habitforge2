@@ -2965,6 +2965,36 @@ body::before {
   color: var(--text-4);
   letter-spacing: 1px;
 }
+.fc-ai-tutor {
+  width: 100%;
+  max-width: 640px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+.fc-ai-btn {
+  align-self: center;
+  min-height: 42px;
+  letter-spacing: 1px;
+}
+.fc-ai-status {
+  font-size: 12px;
+  color: var(--text-3);
+  text-align: center;
+}
+.fc-ai-output {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent-2);
+  border-radius: var(--r);
+  padding: 10px 12px;
+  color: var(--text-2);
+  line-height: 1.55;
+  white-space: pre-wrap;
+  max-height: 230px;
+  overflow: auto;
+}
 .kbd {
   display: inline-block;
   background: var(--bg-4);
