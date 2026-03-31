@@ -924,14 +924,15 @@ async function startStudySession(deckId, subdeckName) {
     const rebuiltQueue = savedSess.queueIds.map(id => cardMap[id]).filter(Boolean);
     const totalQueued  = Array.isArray(savedSess.queueIds) ? savedSess.queueIds.length : 0;
     const missingCardCount = Math.max(0, totalQueued - rebuiltQueue.length);
-    const safeIdx      = clampSessionProgressIdx(savedSess.idx, rebuiltQueue.length);
-    const remaining    = Math.max(0, rebuiltQueue.length - safeIdx);
+    const progressIdx = clampSessionProgressIdx(savedSess.idx, rebuiltQueue.length);
+    const resumeIdx   = Math.min(progressIdx, Math.max(0, rebuiltQueue.length - 1));
+    const remaining   = Math.max(0, rebuiltQueue.length - progressIdx);
     if (remaining > 0) {
       $('fc-study-deck-name').textContent = displayName;
       $('fc-card-wrap').classList.add('fc-hidden');
       $('fc-session-complete').classList.add('fc-hidden');
       $('fc-resume-sub').textContent =
-        `You reviewed ${safeIdx} of ${rebuiltQueue.length} card${rebuiltQueue.length !== 1 ? 's' : ''} — ${remaining} left to go.` +
+        `You reviewed ${progressIdx} of ${rebuiltQueue.length} card${rebuiltQueue.length !== 1 ? 's' : ''} — ${remaining} left to go.` +
         (missingCardCount ? ' Some cards were missing (deck deleted).' : '');
       $('fc-resume-prompt').classList.remove('fc-hidden');
       $('fc-back-to-manage').textContent = '← DECK';
@@ -940,7 +941,7 @@ async function startStudySession(deckId, subdeckName) {
       const onResume = () => {
         cleanup();
         _fcStudyQueue         = rebuiltQueue;
-        _fcStudyIdx           = safeIdx;
+        _fcStudyIdx           = resumeIdx;
         _fcFlipped            = false;
         _fcSessionStats       = { ...(savedSess.stats || { again: 0, hard: 0, good: 0, easy: 0 }) };
         _fcSessionAgainCounts = { ...(savedSess.againCounts || {}) };
@@ -1022,8 +1023,9 @@ async function startInterleavedSession() {
       .filter(Boolean);
     const totalQueued  = Array.isArray(savedSess.queueIds) ? savedSess.queueIds.length : 0;
     const missingCardCount = Math.max(0, totalQueued - rebuiltQueue.length);
-    const safeIdx      = clampSessionProgressIdx(savedSess.idx, rebuiltQueue.length);
-    const remaining    = Math.max(0, rebuiltQueue.length - safeIdx);
+    const progressIdx = clampSessionProgressIdx(savedSess.idx, rebuiltQueue.length);
+    const resumeIdx   = Math.min(progressIdx, Math.max(0, rebuiltQueue.length - 1));
+    const remaining   = Math.max(0, rebuiltQueue.length - progressIdx);
     if (remaining > 0) {
       _fcInterleaveMode = true;
       _fcCurrentDeckId  = null;
@@ -1033,7 +1035,7 @@ async function startInterleavedSession() {
       $('fc-card-wrap').classList.add('fc-hidden');
       $('fc-session-complete').classList.add('fc-hidden');
       $('fc-resume-sub').textContent =
-        `You reviewed ${safeIdx} of ${rebuiltQueue.length} card${rebuiltQueue.length !== 1 ? 's' : ''} — ${remaining} left to go.` +
+        `You reviewed ${progressIdx} of ${rebuiltQueue.length} card${rebuiltQueue.length !== 1 ? 's' : ''} — ${remaining} left to go.` +
         (missingCardCount ? ' Some cards were missing (deck deleted).' : '');
       $('fc-resume-prompt').classList.remove('fc-hidden');
       fcShowPanel('study');
@@ -1045,7 +1047,7 @@ async function startInterleavedSession() {
       const onResume = () => {
         cleanup();
         _fcStudyQueue         = rebuiltQueue;
-        _fcStudyIdx           = safeIdx;
+        _fcStudyIdx           = resumeIdx;
         _fcFlipped            = false;
         _fcSessionStats       = { ...(savedSess.stats || { again: 0, hard: 0, good: 0, easy: 0 }) };
         _fcSessionAgainCounts = { ...(savedSess.againCounts || {}) };

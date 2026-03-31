@@ -276,10 +276,10 @@ async function fbLoadMedia(uid) {
     const deckId = deckDoc.id;
     const meta = deckDoc.data() || {};
     let chunkCount = Number(meta.chunkCount);
-    if (!Number.isFinite(chunkCount) || chunkCount < 0) {
-      if (chunkCount < 0) {
-        console.warn('[HabitForge] Invalid negative chunkCount metadata for deck:', deckId, chunkCount);
-      }
+    if (!Number.isFinite(chunkCount)) {
+      chunkCount = 0;
+    } else if (chunkCount < 0) {
+      console.warn('[HabitForge] Invalid negative chunkCount metadata for deck:', deckId, chunkCount);
       chunkCount = 0;
     }
     const media = {};
