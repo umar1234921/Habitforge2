@@ -77,7 +77,7 @@ function todayLocalKey() {
 // Duration of the card flip CSS transition (must match .fc-card-inner transition in style.css)
 const FC_FLIP_DURATION_MS = 300;
 const FC_AI_TUTOR_TIMEOUT_MS = 15000;
-const FC_AI_TUTOR_MODEL = 'gemini-2.5-flash';
+const FC_AI_TUTOR_MODEL = 'gemini-2.0-flash';
 const FC_AI_TUTOR_TEMPERATURE = 0.3;
 const FC_AI_TUTOR_MAX_TOKENS = 1420;
 const FC_SUBJECT_CTX_MAX_TOPICS = 6;
