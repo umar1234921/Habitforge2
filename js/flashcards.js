@@ -77,6 +77,7 @@ function todayLocalKey() {
 // Duration of the card flip CSS transition (must match .fc-card-inner transition in style.css)
 const FC_FLIP_DURATION_MS = 300;
 const FC_AI_TUTOR_TIMEOUT_MS = 15000;
+const FC_AI_TUTOR_MODEL = 'gemini-1.5-flash';
 const FC_AI_TUTOR_TEMPERATURE = 0.3;
 const FC_AI_TUTOR_MAX_TOKENS = 420;
 const FC_SUBJECT_CTX_MAX_TOPICS = 6;
@@ -342,7 +343,7 @@ async function fcEnsureAiConfigLoaded() {
   _fcAiConfigLoadTried = true;
   if (fcGeminiApiKey()) return;
   try {
-    await loadScript(`${window.location.origin}/js/local-config.js`);
+    await loadScript('/js/local-config.js');
   } catch (e) {
     // Optional local config file may not exist in repository.
   }
@@ -435,7 +436,7 @@ async function explainCurrentCardWithAi() {
 
   try {
     const res = await fetch(
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent',
+      `https://generativelanguage.googleapis.com/v1beta/models/${FC_AI_TUTOR_MODEL}:generateContent`,
       {
         method: 'POST',
         headers: {
@@ -448,6 +449,12 @@ async function explainCurrentCardWithAi() {
             temperature: FC_AI_TUTOR_TEMPERATURE,
             maxOutputTokens: FC_AI_TUTOR_MAX_TOKENS,
           },
+          safetySettings: [
+            { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_ONLY_HIGH' },
+            { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_ONLY_HIGH' },
+            { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_ONLY_HIGH' },
+            { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_ONLY_HIGH' },
+          ],
         }),
         signal: controller.signal,
       }
