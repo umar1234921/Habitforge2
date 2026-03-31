@@ -4,7 +4,8 @@
   "description": "HabitForge GCSE — offline-first study dashboard",
   "main": "electron/main.js",
   "scripts": {
-    "desktop:dev": "electron .",
+    "web:dev": "vite --port 3000 --strictPort",
+    "desktop:dev": "concurrently -k \"npm run web:dev\" \"wait-on http://localhost:3000 && cross-env ELECTRON_RENDERER_URL=http://localhost:3000 electron .\"",
     "desktop:build": "electron-builder"
   },
   "repository": {
@@ -20,8 +21,12 @@
   },
   "homepage": "https://github.com/umar1234921/Habitforge2#readme",
   "devDependencies": {
+    "concurrently": "9.1.2",
+    "cross-env": "7.0.3",
     "electron": "29.1.0",
-    "electron-builder": "24.13.3"
+    "electron-builder": "24.13.3",
+    "vite": "5.4.19",
+    "wait-on": "8.0.3"
   },
   "build": {
     "appId": "com.habitforge.gcse",

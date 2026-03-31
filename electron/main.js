@@ -14,6 +14,14 @@ function createWindow() {
     },
   });
 
+  const isDev = !app.isPackaged;
+  const devServerUrl = process.env.ELECTRON_RENDERER_URL;
+
+  if (isDev && devServerUrl) {
+    win.loadURL(devServerUrl);
+    return;
+  }
+
   win.loadFile(path.join(__dirname, '..', 'index.html'));
 }
 
