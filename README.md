@@ -12,6 +12,8 @@ npm run web:dev
 Create a local gitignored file at `/js/local-config.js`:
 ```js
 window.HF_OPENROUTER_API_KEY = 'your-openrouter-api-key';
+window.HF_OPENROUTER_HTTP_REFERER = 'https://your-site.example.com'; // optional (defaults to window.location.origin)
+window.HF_OPENROUTER_TITLE = 'Your App Name';
 ```
 Then use **AI Tutor Mode** inside flashcard study to get beginner-friendly explanations with deck + GCSE context.
 Use a restricted key (API and quota limits) because this app runs client-side. For stronger key security, route requests through your own backend proxy.

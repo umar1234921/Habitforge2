@@ -77,11 +77,9 @@ function todayLocalKey() {
 // Duration of the card flip CSS transition (must match .fc-card-inner transition in style.css)
 const FC_FLIP_DURATION_MS = 300;
 const FC_AI_TUTOR_TIMEOUT_MS = 15000;
-const FC_AI_TUTOR_MODEL = 'google/gemini-2.5-flash:free';
+const FC_AI_TUTOR_MODEL = 'openai/gpt-oss-120b:free';
 const FC_AI_TUTOR_TEMPERATURE = 0.3;
 const FC_AI_TUTOR_MAX_TOKENS = 2500;
-const FC_OPENROUTER_REFERER = 'https://your-app.example.com';
-const FC_OPENROUTER_TITLE = 'HabitForge2 Flashcards';
 const FC_SUBJECT_CTX_MAX_TOPICS = 6;
 const FC_SUBJECT_CTX_MAX_POINTS = 3;
 
@@ -348,6 +346,14 @@ function fcOpenRouterApiKey() {
   ).trim();
 }
 
+function fcOpenRouterReferer() {
+  return (window.HF_OPENROUTER_HTTP_REFERER || window.location.origin || 'https://your-app.example.com').trim();
+}
+
+function fcOpenRouterTitle() {
+  return (window.HF_OPENROUTER_TITLE || 'HabitForge2 Flashcards').trim();
+}
+
 async function fcEnsureAiConfigLoaded() {
   if (_fcAiConfigLoadTried) return;
   _fcAiConfigLoadTried = true;
@@ -399,7 +405,7 @@ function fcBuildTutorPrompt(card, deck) {
   ].join('\n');
 }
 
-function fcExtractGeminiText(payload) {
+function fcExtractAiText(payload) {
   try {
     const content = payload && payload.choices && payload.choices[0] &&
       payload.choices[0].message
@@ -460,8 +466,8 @@ async function explainCurrentCardWithAi() {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${apiKey}`,
-          'HTTP-Referer': FC_OPENROUTER_REFERER,
-          'X-Title': FC_OPENROUTER_TITLE,
+          'HTTP-Referer': fcOpenRouterReferer(),
+          'X-Title': fcOpenRouterTitle(),
         },
         body: JSON.stringify({
           model: FC_AI_TUTOR_MODEL,
@@ -475,7 +481,7 @@ async function explainCurrentCardWithAi() {
     if (!res.ok) throw new Error(`OpenRouter request failed (${res.status})`);
     const data = await res.json();
     console.log("OpenRouter API Response:", data);
-    const text = fcExtractGeminiText(data);
+    const text = fcExtractAiText(data);
     if (!text) throw new Error('Empty tutor response');
 
     fcAiCacheSet(key, text);
