@@ -76,6 +76,11 @@ function todayLocalKey() {
 
 // Duration of the card flip CSS transition (must match .fc-card-inner transition in style.css)
 const FC_FLIP_DURATION_MS = 300;
+const FC_AI_TUTOR_TIMEOUT_MS = 15000;
+const FC_AI_TUTOR_TEMPERATURE = 0.3;
+const FC_AI_TUTOR_MAX_TOKENS = 420;
+const FC_SUBJECT_CTX_MAX_TOPICS = 6;
+const FC_SUBJECT_CTX_MAX_POINTS = 3;
 
 
 const SRS = {
@@ -245,6 +250,15 @@ let _fcFlipped            = false;
 let _fcSessionStats       = { again: 0, hard: 0, good: 0, easy: 0 };
 let _fcSessionAgainCounts = {}; // tracks per-card re-queue count this session
 let _fcInterleaveMode     = false; // true during a cross-deck interleaved session
+let _fcDeckLookup         = null; // cached deckId -> deck for study-session rendering
+let _fcAiTutorInFlight    = false;
+let _fcAiTutorCardKey     = null;
+let _fcGradeBtnsByGrade   = null;
+let _fcAiConfigLoadTried  = false;
+let _fcAiTutorAbort       = null;
+const _fcAiTutorCache     = new Map();
+const _fcSubjectCtxCache  = new Map();
+const FC_AI_TUTOR_CACHE_MAX = 64;
 
 function fcCurrentDeck() {
   return (S.flashcardDecks || []).find(d => d.id === _fcCurrentDeckId) || null;
@@ -255,9 +269,210 @@ function fcCurrentDeck() {
 function _fcDeckForCard(card) {
   if (_fcInterleaveMode) {
     const id = card && card._deckId;
-    return id ? ((S.flashcardDecks || []).find(d => d.id === id) || null) : null;
+    if (!id) return null;
+    if (_fcDeckLookup && _fcDeckLookup.has(id)) return _fcDeckLookup.get(id) || null;
+    return (S.flashcardDecks || []).find(d => d.id === id) || null;
   }
   return fcCurrentDeck();
+}
+
+function fcCurrentStudyCard() {
+  return (_fcStudyIdx >= 0 && _fcStudyIdx < _fcStudyQueue.length) ? _fcStudyQueue[_fcStudyIdx] : null;
+}
+
+function fcAiTutorKey(card, deck) {
+  if (!card) return '';
+  const deckId = deck && deck.id ? deck.id : (_fcInterleaveMode ? (card._deckId || '') : (_fcCurrentDeckId || ''));
+  return `${deckId}::${card.id || ''}::${card.front || ''}::${card.back || ''}`;
+}
+
+function fcAiCacheSet(key, val) {
+  if (!key || !val) return;
+  _fcAiTutorCache.set(key, val);
+  if (_fcAiTutorCache.size > FC_AI_TUTOR_CACHE_MAX) {
+    const oldestKey = _fcAiTutorCache.keys().next().value;
+    if (oldestKey) _fcAiTutorCache.delete(oldestKey);
+  }
+}
+
+function fcSetAiStatus(text) {
+  const el = $('fc-ai-status');
+  if (el) el.textContent = text;
+}
+
+function fcSetAiOutput(text) {
+  const el = $('fc-ai-output');
+  if (!el) return;
+  if (!text) {
+    el.textContent = '';
+    el.classList.add('fc-hidden');
+    return;
+  }
+  el.textContent = text;
+  el.classList.remove('fc-hidden');
+}
+
+function fcPrepareAiTutor(card, deck) {
+  const btn = $('fc-ai-tutor-btn');
+  if (!btn) return;
+  if (_fcAiTutorAbort) {
+    try { _fcAiTutorAbort.abort(); } catch(e) {}
+    _fcAiTutorAbort = null;
+  }
+  _fcAiTutorInFlight = false;
+  btn.disabled = false;
+  const key = fcAiTutorKey(card, deck);
+  _fcAiTutorCardKey = key;
+  const cached = key ? _fcAiTutorCache.get(key) : null;
+  if (cached) {
+    fcSetAiStatus('AI Tutor explanation ready (cached).');
+    fcSetAiOutput(cached);
+  } else {
+    fcSetAiStatus('Need help? Ask AI Tutor for a beginner-friendly explanation.');
+    fcSetAiOutput('');
+  }
+}
+
+function fcGeminiApiKey() {
+  return (window.HF_GEMINI_API_KEY || window.GEMINI_API_KEY || window.hfGeminiApiKey || '').trim();
+}
+
+async function fcEnsureAiConfigLoaded() {
+  if (_fcAiConfigLoadTried) return;
+  _fcAiConfigLoadTried = true;
+  if (fcGeminiApiKey()) return;
+  try {
+    await loadScript(`${window.location.origin}/js/local-config.js`);
+  } catch (e) {
+    // Optional local config file may not exist in repository.
+  }
+}
+
+function fcSubjectContext(deck) {
+  const subjectKey = deck && deck.subject ? deck.subject : '';
+  if (!subjectKey) return '';
+  if (_fcSubjectCtxCache.has(subjectKey)) return _fcSubjectCtxCache.get(subjectKey);
+  const subj = GCSE_SUBJECTS[subjectKey];
+  if (!subj) return '';
+  const lines = [];
+  lines.push(`Subject: ${subj.name || subjectKey}`);
+  if (subj.board) lines.push(`Exam board: ${subj.board}`);
+  const topics = Array.isArray(subj.topics) ? subj.topics.slice(0, FC_SUBJECT_CTX_MAX_TOPICS) : [];
+  topics.forEach(t => {
+    const pts = Array.isArray(t.points) ? t.points.slice(0, FC_SUBJECT_CTX_MAX_POINTS) : [];
+    lines.push(`- ${t.topic}: ${pts.join('; ')}`);
+  });
+  const ctx = lines.join('\n');
+  _fcSubjectCtxCache.set(subjectKey, ctx);
+  return ctx;
+}
+
+function fcBuildTutorPrompt(card, deck) {
+  const deckName = deck && deck.name ? deck.name : (_fcInterleaveMode ? (card._deckName || 'Interleaved') : 'Deck');
+  const subjectCtx = fcSubjectContext(deck);
+  return [
+    'You are a GCSE tutor.',
+    'Explain this flashcard to a student who knows absolutely nothing about the topic.',
+    'Keep language very simple and avoid jargon.',
+    'Use this exact structure:',
+    '1) Plain-English idea (2-3 lines)',
+    '2) Why it matters for GCSE',
+    '3) Tiny worked example',
+    '4) One common mistake',
+    '5) One quick check question (with answer hidden after "Answer:")',
+    '',
+    `Deck: ${deckName}`,
+    `Flashcard question: ${card.front || ''}`,
+    `Flashcard answer: ${card.back || ''}`,
+    subjectCtx ? `GCSE context:\n${subjectCtx}` : 'GCSE context: general GCSE revision context',
+  ].join('\n');
+}
+
+function fcExtractGeminiText(payload) {
+  try {
+    const parts = payload && payload.candidates && payload.candidates[0] &&
+      payload.candidates[0].content && Array.isArray(payload.candidates[0].content.parts)
+      ? payload.candidates[0].content.parts
+      : [];
+    return parts.map(p => (p && p.text) ? p.text : '').join('\n').trim();
+  } catch (e) {
+    return '';
+  }
+}
+
+async function explainCurrentCardWithAi() {
+  const card = fcCurrentStudyCard();
+  if (!card) return;
+  const deck = _fcDeckForCard(card);
+  const key = fcAiTutorKey(card, deck);
+  if (!key) return;
+
+  const cached = _fcAiTutorCache.get(key);
+  if (cached) {
+    fcSetAiStatus('AI Tutor explanation ready (cached).');
+    fcSetAiOutput(cached);
+    return;
+  }
+  if (_fcAiTutorInFlight) return;
+
+  await fcEnsureAiConfigLoaded();
+  const apiKey = fcGeminiApiKey();
+  if (!apiKey) {
+    fcSetAiStatus('AI Tutor unavailable: Gemini API key not found.');
+    toast('Add HF_GEMINI_API_KEY in /js/local-config.js (see README).', 'info');
+    return;
+  }
+
+  _fcAiTutorInFlight = true;
+  const btn = $('fc-ai-tutor-btn');
+  if (btn) btn.disabled = true;
+  fcSetAiStatus('AI Tutor is thinking…');
+
+  const prompt = fcBuildTutorPrompt(card, deck);
+  const controller = new AbortController();
+  _fcAiTutorAbort = controller;
+  const timeout = setTimeout(() => controller.abort(), FC_AI_TUTOR_TIMEOUT_MS);
+
+  try {
+    const res = await fetch(
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': apiKey,
+        },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: FC_AI_TUTOR_TEMPERATURE,
+            maxOutputTokens: FC_AI_TUTOR_MAX_TOKENS,
+          },
+        }),
+        signal: controller.signal,
+      }
+    );
+    if (!res.ok) throw new Error(`Gemini request failed (${res.status})`);
+    const data = await res.json();
+    const text = fcExtractGeminiText(data);
+    if (!text) throw new Error('Empty tutor response');
+
+    fcAiCacheSet(key, text);
+    if (_fcAiTutorCardKey === key) {
+      fcSetAiOutput(text);
+      fcSetAiStatus('AI Tutor explanation ready.');
+    }
+  } catch (e) {
+    if (_fcAiTutorCardKey === key) {
+      fcSetAiStatus('AI Tutor failed — check your key/connection and try again.');
+    }
+    console.warn('[ai tutor]', e);
+  } finally {
+    clearTimeout(timeout);
+    if (_fcAiTutorAbort === controller) _fcAiTutorAbort = null;
+    _fcAiTutorInFlight = false;
+    if (btn) btn.disabled = false;
+  }
 }
 
 // Returns a new array of cards interleaved round-robin by the supplied key function.
@@ -875,6 +1090,7 @@ function _fcStartFresh(deck, due, options = {}) {
   _fcFlipped            = false;
   _fcSessionStats       = { again: 0, hard: 0, good: 0, easy: 0 };
   _fcSessionAgainCounts = {};
+  _fcDeckLookup = null;
   if (options.clearSession !== false) {
     fcClearSavedSession('start-fresh');
   }
@@ -882,6 +1098,7 @@ function _fcStartFresh(deck, due, options = {}) {
 
 async function startStudySession(deckId, subdeckName) {
   _fcInterleaveMode = false;
+  _fcDeckLookup = null;
   _fcCurrentDeckId  = deckId;
   _fcCurrentSubdeck = subdeckName || null;
   const deck = fcCurrentDeck();
@@ -993,6 +1210,7 @@ async function startStudySession(deckId, subdeckName) {
 async function startInterleavedSession() {
   const allDecks = S.flashcardDecks || [];
   if (!allDecks.length) { toast('No decks yet — create one first!', 'err'); return; }
+  _fcDeckLookup = new Map(allDecks.map(d => [d.id, d]));
 
   // Load all media in a single IDB pass so card images render correctly
   try {
@@ -1114,6 +1332,7 @@ function _launchFreshInterleavedSession(allDecks) {
   }
 
   _fcInterleaveMode     = true;
+  _fcDeckLookup         = new Map(allDecks.map(d => [d.id, d]));
   _fcCurrentDeckId      = null;
   _fcCurrentSubdeck     = null;
   _fcStudyQueue         = queue;
@@ -1157,6 +1376,7 @@ function renderStudyCard() {
   $('fc-card-inner').classList.remove('fc-flipped');
   $('fc-flip-btn').classList.remove('fc-hidden');
   $('fc-grade-btns').classList.add('fc-hidden');
+  fcPrepareAiTutor(card, deck);
 
   if (wasFlipped) {
     // The card was showing the answer side.  Delay updating the back-face
@@ -1176,7 +1396,7 @@ function renderStudyCard() {
   function updateGradeHints(card) {
     const deck = _fcDeckForCard(card);
     [0, 1, 2, 3].forEach(g => {
-      const btn  = document.querySelector(`.fc-grade[data-grade="${g}"]`);
+      const btn  = _fcGradeBtnsByGrade ? _fcGradeBtnsByGrade[g] : document.querySelector(`.fc-grade[data-grade="${g}"]`);
       if (!btn) return;
       const sim  = SRS.gradeExamAware({ ...card }, g, deck);
       const span = btn.querySelector('.fc-grade-interval');
@@ -1233,6 +1453,10 @@ function gradeCard(g) {
 
 function showSessionComplete() {
   fcClearSavedSession('completed');
+  if (_fcAiTutorAbort) {
+    try { _fcAiTutorAbort.abort(); } catch(e) {}
+    _fcAiTutorAbort = null;
+  }
   // Update streak for the current deck
   const deck = fcCurrentDeck();
   if (deck) {
@@ -1253,6 +1477,8 @@ function showSessionComplete() {
   }
 
   $('fc-card-wrap').classList.add('fc-hidden');
+  fcSetAiOutput('');
+  fcSetAiStatus('Need help? Ask AI Tutor for a beginner-friendly explanation.');
   const { again, hard, good, easy } = _fcSessionStats;
   const total = again + hard + good + easy;
   const pass  = hard + good + easy;
@@ -1280,6 +1506,7 @@ function showSessionComplete() {
   if (_fcInterleaveMode) {
     $('fc-done-back-btn').addEventListener('click', () => {
       _fcInterleaveMode = false;
+      _fcDeckLookup = null;
       fcShowPanel('decks');
       renderFCDecks();
     });
@@ -1873,7 +2100,12 @@ function initFlashcards() {
   // Study panel
   $('fc-back-to-manage').addEventListener('click', () => {
     if (_fcInterleaveMode) {
+      if (_fcAiTutorAbort) {
+        try { _fcAiTutorAbort.abort(); } catch(e) {}
+        _fcAiTutorAbort = null;
+      }
       _fcInterleaveMode = false;
+      _fcDeckLookup = null;
       fcShowPanel('decks');
       renderFCDecks();
     } else {
@@ -1881,8 +2113,15 @@ function initFlashcards() {
     }
   });
   $('fc-flip-btn').addEventListener('click', flipCard);
-  document.querySelectorAll('.fc-grade').forEach(btn =>
-    btn.addEventListener('click', () => gradeCard(parseInt(btn.dataset.grade))));
+  _fcGradeBtnsByGrade = {};
+  document.querySelectorAll('.fc-grade').forEach(btn => {
+    const grade = parseInt(btn.dataset.grade);
+    _fcGradeBtnsByGrade[grade] = btn;
+    btn.addEventListener('click', () => gradeCard(grade));
+  });
+  $('fc-ai-tutor-btn')?.addEventListener('click', () => {
+    explainCurrentCardWithAi();
+  });
 
   // Interleave all decks button (deck list toolbar)
   const interleaveAllBtn = $('fc-interleave-all-btn');
