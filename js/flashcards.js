@@ -436,7 +436,7 @@ async function explainCurrentCardWithAi() {
 
   try {
     const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${FC_AI_TUTOR_MODEL}:generateContent=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${FC_AI_TUTOR_MODEL}:generateContent?key=${apiKey}`,
       {
         method: 'POST',
         headers: {
