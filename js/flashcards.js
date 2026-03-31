@@ -318,7 +318,7 @@ function updateRestoreSessionBtn() {
 
 function fcTrashSession(reason = 'cleared') {
   const sess = S.fcSession;
-  if (!sess || sess.status === 'cleared' || sess.trashed) return;
+  if (!sess || sess.status === 'cleared') return;
   if (!Array.isArray(S.fcSessionTrash)) S.fcSessionTrash = [];
   const copy = fcCloneSession(sess);
   if (!copy) return;
@@ -373,7 +373,6 @@ function fcRestoreLastSession() {
       return;
     }
     delete restored.status;
-    delete restored.trashed;
     S.fcSession = restored;
     save();
     updateRestoreSessionBtn();
@@ -413,7 +412,7 @@ function markSessionDeckDeleted(deckId, deckName) {
   };
 }
 
-function clampSessionResumeIdx(idx, length) {
+function clampToLastValidIndex(idx, length) {
   const safeIdx = Number.isFinite(idx) ? idx : 0;
   return Math.max(0, Math.min(safeIdx, Math.max(0, length - 1)));
 }
@@ -444,7 +443,7 @@ function fcSaveSessionProgress() {
 function fcLoadSavedSession(deckId, subdeckName) {
   try {
     const sess = S.fcSession;
-    if (!sess || sess.status === 'cleared' || sess.trashed) return null;
+    if (!sess || sess.status === 'cleared') return null;
     if (
       sess.deckId === deckId &&
       (sess.subdeck || null) === (subdeckName || null) &&
@@ -461,7 +460,7 @@ function fcLoadSavedSession(deckId, subdeckName) {
 function fcLoadSavedInterleavedSession() {
   try {
     const sess = S.fcSession;
-    if (!sess || sess.status === 'cleared' || sess.trashed) return null;
+    if (!sess || sess.status === 'cleared') return null;
     if (
       sess.interleaved === true &&
       sess.deckId === null &&
@@ -926,7 +925,7 @@ async function startStudySession(deckId, subdeckName) {
     const missingCardCount = Math.max(0, totalQueued - rebuiltQueue.length);
     const rawIdx      = Number.isFinite(savedSess.idx) ? savedSess.idx : 0;
     const progressIdx = Math.min(Math.max(0, rawIdx), rebuiltQueue.length);
-    const resumeIdx   = clampSessionResumeIdx(rawIdx, rebuiltQueue.length);
+    const resumeIdx   = clampToLastValidIndex(rawIdx, rebuiltQueue.length);
     const remaining   = Math.max(0, rebuiltQueue.length - progressIdx);
     if (remaining > 0) {
       $('fc-study-deck-name').textContent = displayName;
@@ -1026,7 +1025,7 @@ async function startInterleavedSession() {
     const missingCardCount = Math.max(0, totalQueued - rebuiltQueue.length);
     const rawIdx      = Number.isFinite(savedSess.idx) ? savedSess.idx : 0;
     const progressIdx = Math.min(Math.max(0, rawIdx), rebuiltQueue.length);
-    const resumeIdx   = clampSessionResumeIdx(rawIdx, rebuiltQueue.length);
+    const resumeIdx   = clampToLastValidIndex(rawIdx, rebuiltQueue.length);
     const remaining   = Math.max(0, rebuiltQueue.length - progressIdx);
     if (remaining > 0) {
       _fcInterleaveMode = true;

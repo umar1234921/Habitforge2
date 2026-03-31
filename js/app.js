@@ -3,7 +3,8 @@
    ================================================================ */
 
 // ─── STATE ────────────────────────────────────────────────
-const IS_DESKTOP_APP = (typeof window !== 'undefined' && !!window.process?.versions?.electron) ||
+const IS_DESKTOP_APP = !!window.habitforgeEnv?.isElectron ||
+  (typeof window !== 'undefined' && !!window.process?.versions?.electron) ||
   /Electron/i.test(navigator.userAgent || '');
 const S = {
   mastered: {},        // { "subjectKey:topicId:pointIdx": true }

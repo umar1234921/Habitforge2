@@ -35,7 +35,7 @@ let cloudSaveTimer = null;
 let cloudSaveInFlight = false;
 let pendingSaveRequested = false;
 
-let docRef = null;
+let docFn = null;
 let setDoc = null;
 let getDoc = null;
 let getDocs = null;
@@ -59,13 +59,26 @@ const firebaseConfig = {
   measurementId: "G-D8RYCC1DJY"
 };
 
-const _localSave = window.save;
-if (typeof _localSave === 'function') {
+let baseSave = null;
+let saveWrapped = false;
+
+function wrapSave() {
+  if (saveWrapped) return true;
+  if (typeof window.save !== 'function') return false;
+  baseSave = window.save;
   window.save = function(options = {}) {
-    _localSave(options);
+    baseSave(options);
     if (options.skipCloudSync) return;
     if (isCloudSyncEnabled()) requestCloudSave();
   };
+  saveWrapped = true;
+  return true;
+}
+
+if (!wrapSave()) {
+  window.addEventListener('DOMContentLoaded', () => {
+    wrapSave();
+  }, { once: true });
 }
 
 function isCloudSyncEnabled() {
@@ -361,7 +374,7 @@ async function fbSaveMedia(uid, decks) {
         try {
           await withRetry(() =>
             setDoc(
-              docRef(db, 'gcse_users', uid, 'deck_media', deck.id, 'chunks', String(i)),
+              docFn(db, 'gcse_users', uid, 'deck_media', deck.id, 'chunks', String(i)),
               { media: chunks[i] },
               { merge: true }
             )
@@ -393,7 +406,7 @@ async function fbSaveMedia(uid, decks) {
 
     await withRetry(() =>
       setDoc(
-        docRef(db, 'gcse_users', uid, 'deck_media', deck.id),
+        docFn(db, 'gcse_users', uid, 'deck_media', deck.id),
         { chunkCount: chunks.length, updatedAt: Date.now() },
         { merge: true }
       )
@@ -410,7 +423,7 @@ async function fbSaveMedia(uid, decks) {
 
 async function fbLoad(uid) {
   try {
-    const snap = await getDoc(docRef(db, 'gcse_users', uid));
+    const snap = await getDoc(docFn(db, 'gcse_users', uid));
     if (snap.exists()) {
       const cloudData = snap.data() || {};
       const localRevision = Number.isFinite(S.clientRevision) ? S.clientRevision : 0;
@@ -493,7 +506,7 @@ async function performCloudSave() {
     stateForCloud.flashcardDecks = S.flashcardDecks.map(({ media, ...rest }) => rest);
   }
   if (!Number.isFinite(stateForCloud.clientRevision)) stateForCloud.clientRevision = 0;
-  await withRetry(() => setDoc(docRef(db, 'gcse_users', fbUid), stateForCloud));
+  await withRetry(() => setDoc(docFn(db, 'gcse_users', fbUid), stateForCloud));
   const allDecks = Array.isArray(S.flashcardDecks) ? S.flashcardDecks : [];
   await fbSaveMedia(fbUid, allDecks);
 }
@@ -515,11 +528,13 @@ async function ensureCloudSyncStarted() {
   if (firebaseReady) return;
   if (firebaseInitPromise) return firebaseInitPromise;
   firebaseInitPromise = (async () => {
-    ({ initializeApp } = await import("https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js"));
-    ({ getFirestore, doc: docRef, setDoc, getDoc, getDocs, collection } =
-      await import("https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore.js"));
-    ({ getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged } =
-      await import("https://www.gstatic.com/firebasejs/10.7.0/firebase-auth.js"));
+    const firebaseApp = await import("https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js");
+    const firestore = await import("https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore.js");
+    const authMod = await import("https://www.gstatic.com/firebasejs/10.7.0/firebase-auth.js");
+
+    ({ initializeApp } = firebaseApp);
+    ({ getFirestore, doc: docFn, setDoc, getDoc, getDocs, collection } = firestore);
+    ({ getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged } = authMod);
 
     app  = initializeApp(firebaseConfig);
     db   = getFirestore(app);
