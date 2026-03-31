@@ -4,4 +4,4 @@ out/
 release/
 *.log
 .DS_Store
-js/local-config.js
+
