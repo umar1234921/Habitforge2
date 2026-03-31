@@ -76,6 +76,11 @@ function todayLocalKey() {
 
 // Duration of the card flip CSS transition (must match .fc-card-inner transition in style.css)
 const FC_FLIP_DURATION_MS = 300;
+const FC_AI_TUTOR_TIMEOUT_MS = 15000;
+const FC_AI_TUTOR_TEMPERATURE = 0.3;
+const FC_AI_TUTOR_MAX_TOKENS = 420;
+const FC_SUBJECT_CTX_MAX_TOPICS = 6;
+const FC_SUBJECT_CTX_MAX_POINTS = 3;
 
 
 const SRS = {
@@ -352,9 +357,9 @@ function fcSubjectContext(deck) {
   const lines = [];
   lines.push(`Subject: ${subj.name || subjectKey}`);
   if (subj.board) lines.push(`Exam board: ${subj.board}`);
-  const topics = Array.isArray(subj.topics) ? subj.topics.slice(0, 6) : [];
+  const topics = Array.isArray(subj.topics) ? subj.topics.slice(0, FC_SUBJECT_CTX_MAX_TOPICS) : [];
   topics.forEach(t => {
-    const pts = Array.isArray(t.points) ? t.points.slice(0, 3) : [];
+    const pts = Array.isArray(t.points) ? t.points.slice(0, FC_SUBJECT_CTX_MAX_POINTS) : [];
     lines.push(`- ${t.topic}: ${pts.join('; ')}`);
   });
   const ctx = lines.join('\n');
@@ -414,7 +419,7 @@ async function explainCurrentCardWithAi() {
   const apiKey = fcGeminiApiKey();
   if (!apiKey) {
     fcSetAiStatus('AI Tutor unavailable: Gemini API key not found.');
-    toast('Add HF_GEMINI_API_KEY in your local gitignored config file.', 'info');
+    toast('Add HF_GEMINI_API_KEY in /js/local-config.js (see README).', 'info');
     return;
   }
 
@@ -426,17 +431,23 @@ async function explainCurrentCardWithAi() {
   const prompt = fcBuildTutorPrompt(card, deck);
   const controller = new AbortController();
   _fcAiTutorAbort = controller;
-  const timeout = setTimeout(() => controller.abort(), 15000);
+  const timeout = setTimeout(() => controller.abort(), FC_AI_TUTOR_TIMEOUT_MS);
 
   try {
     const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent',
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': apiKey,
+        },
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.3, maxOutputTokens: 420 },
+          generationConfig: {
+            temperature: FC_AI_TUTOR_TEMPERATURE,
+            maxOutputTokens: FC_AI_TUTOR_MAX_TOKENS,
+          },
         }),
         signal: controller.signal,
       }
