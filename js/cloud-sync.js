@@ -3,9 +3,10 @@ const syncBtn = document.getElementById('sync-btn');
 const syncToggle = document.getElementById('cloud-sync-toggle');
 const syncStatus = document.getElementById('cloud-sync-status');
 
-const CLOUD_SAVE_DEBOUNCE_MS = 2200;
+const CLOUD_SAVE_DEBOUNCE_MS = 2500;
 const CLOUD_SAVE_BASE_BACKOFF_MS = 2000;
 const CLOUD_SAVE_MAX_BACKOFF_MS = 5 * 60 * 1000;
+const MAX_CIRCUIT_FAILURE_COUNT = 8;
 const MAX_MEDIA_CHUNK_CHARS = 700000;
 
 const CLOUD_SYNC_STATES = {
@@ -160,7 +161,7 @@ function isTransientError(err) {
 }
 
 function openCircuit(err) {
-  circuit.failureCount = Math.min(circuit.failureCount + 1, 8);
+  circuit.failureCount = Math.min(circuit.failureCount + 1, MAX_CIRCUIT_FAILURE_COUNT);
   const jitter = 0.5 + Math.random() * 0.5;
   const delayMs = Math.min(
     CLOUD_SAVE_MAX_BACKOFF_MS,

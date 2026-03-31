@@ -291,7 +291,7 @@ function _interleaveByKey(cards, keyFn) {
 // ─── SESSION PROGRESS PERSISTENCE ────────────────────────
 // Session state is stored in S.fcSession so that it is included in the
 // regular save() / cloud sync cycle and persists across devices.
-const FC_SESSION_TRASH_LIMIT = 8;
+const FC_SESSION_TRASH_MAX_ENTRIES = 8;
 
 function fcCloneSession(sess) {
   try { return JSON.parse(JSON.stringify(sess)); } catch (e) { return null; }
@@ -333,8 +333,8 @@ function fcTrashSession(reason = 'cleared') {
     session: copy,
     meta,
   });
-  if (S.fcSessionTrash.length > FC_SESSION_TRASH_LIMIT) {
-    S.fcSessionTrash.length = FC_SESSION_TRASH_LIMIT;
+  if (S.fcSessionTrash.length > FC_SESSION_TRASH_MAX_ENTRIES) {
+    S.fcSessionTrash.length = FC_SESSION_TRASH_MAX_ENTRIES;
   }
   updateRestoreSessionBtn();
 }
@@ -413,7 +413,7 @@ function markSessionDeckDeleted(deckId, deckName) {
   };
 }
 
-function clampSessionIdx(idx, length) {
+function clampSessionProgressIdx(idx, length) {
   const safeIdx = Number.isFinite(idx) ? idx : 0;
   return Math.max(0, Math.min(safeIdx, Math.max(0, length)));
 }
@@ -923,8 +923,8 @@ async function startStudySession(deckId, subdeckName) {
     const cardMap = Object.fromEntries(deckForStudy.cards.map(c => [c.id, c]));
     const rebuiltQueue = savedSess.queueIds.map(id => cardMap[id]).filter(Boolean);
     const totalQueued  = Array.isArray(savedSess.queueIds) ? savedSess.queueIds.length : 0;
-    const missingCount = Math.max(0, totalQueued - rebuiltQueue.length);
-    const safeIdx      = clampSessionIdx(savedSess.idx, rebuiltQueue.length);
+    const missingCardCount = Math.max(0, totalQueued - rebuiltQueue.length);
+    const safeIdx      = clampSessionProgressIdx(savedSess.idx, rebuiltQueue.length);
     const remaining    = Math.max(0, rebuiltQueue.length - safeIdx);
     if (remaining > 0) {
       $('fc-study-deck-name').textContent = displayName;
@@ -932,7 +932,7 @@ async function startStudySession(deckId, subdeckName) {
       $('fc-session-complete').classList.add('fc-hidden');
       $('fc-resume-sub').textContent =
         `You reviewed ${safeIdx} of ${rebuiltQueue.length} card${rebuiltQueue.length !== 1 ? 's' : ''} — ${remaining} left to go.` +
-        (missingCount ? ' Some cards were missing (deck deleted).' : '');
+        (missingCardCount ? ' Some cards were missing (deck deleted).' : '');
       $('fc-resume-prompt').classList.remove('fc-hidden');
       $('fc-back-to-manage').textContent = '← DECK';
       fcShowPanel('study');
@@ -946,7 +946,7 @@ async function startStudySession(deckId, subdeckName) {
         _fcSessionAgainCounts = { ...(savedSess.againCounts || {}) };
         $('fc-resume-prompt').classList.add('fc-hidden');
         $('fc-card-wrap').classList.remove('fc-hidden');
-        if (missingCount) {
+        if (missingCardCount) {
           toast(`Some cards missing (deck deleted). Resumed with ${remaining} remaining.`, 'info');
         }
         renderStudyCard();
@@ -966,7 +966,7 @@ async function startStudySession(deckId, subdeckName) {
       $('fc-resume-no').addEventListener('click', onFresh);
       return;
     }
-    if (missingCount) {
+    if (missingCardCount) {
       toast('Some cards missing from your previous session. Starting fresh.', 'info');
       skipClearForMissing = true;
     } else {
@@ -1021,8 +1021,8 @@ async function startInterleavedSession() {
       .map(entry => cardByKey[`${entry._deckId}:${entry.id}`] || null)
       .filter(Boolean);
     const totalQueued  = Array.isArray(savedSess.queueIds) ? savedSess.queueIds.length : 0;
-    const missingCount = Math.max(0, totalQueued - rebuiltQueue.length);
-    const safeIdx      = clampSessionIdx(savedSess.idx, rebuiltQueue.length);
+    const missingCardCount = Math.max(0, totalQueued - rebuiltQueue.length);
+    const safeIdx      = clampSessionProgressIdx(savedSess.idx, rebuiltQueue.length);
     const remaining    = Math.max(0, rebuiltQueue.length - safeIdx);
     if (remaining > 0) {
       _fcInterleaveMode = true;
@@ -1034,7 +1034,7 @@ async function startInterleavedSession() {
       $('fc-session-complete').classList.add('fc-hidden');
       $('fc-resume-sub').textContent =
         `You reviewed ${safeIdx} of ${rebuiltQueue.length} card${rebuiltQueue.length !== 1 ? 's' : ''} — ${remaining} left to go.` +
-        (missingCount ? ' Some cards were missing (deck deleted).' : '');
+        (missingCardCount ? ' Some cards were missing (deck deleted).' : '');
       $('fc-resume-prompt').classList.remove('fc-hidden');
       fcShowPanel('study');
 
@@ -1051,7 +1051,7 @@ async function startInterleavedSession() {
         _fcSessionAgainCounts = { ...(savedSess.againCounts || {}) };
         $('fc-resume-prompt').classList.add('fc-hidden');
         $('fc-card-wrap').classList.remove('fc-hidden');
-        if (missingCount) {
+        if (missingCardCount) {
           toast(`Some cards missing (deck deleted). Resumed with ${remaining} remaining.`, 'info');
         }
         renderStudyCard();
@@ -1066,7 +1066,7 @@ async function startInterleavedSession() {
       $('fc-resume-no').addEventListener('click', onFresh);
       return;
     }
-    if (missingCount) {
+    if (missingCardCount) {
       toast('Some cards missing from your previous session. Starting fresh.', 'info');
       skipClearForMissing = true;
     } else {
