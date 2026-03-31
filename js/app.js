@@ -3,9 +3,6 @@
    ================================================================ */
 
 // ─── STATE ────────────────────────────────────────────────
-const IS_DESKTOP_APP = !!window.habitforgeEnv?.isElectron ||
-  (typeof window !== 'undefined' && !!window.process?.versions?.electron) ||
-  /Electron/i.test(navigator.userAgent || '');
 const S = {
   mastered: {},        // { "subjectKey:topicId:pointIdx": true }
   specAmber: {},       // { "subjectKey:topicId:pointIdx": true } — amber/learning state
@@ -27,7 +24,7 @@ const S = {
   flashcardDecks: [],  // [ { id, name, subject, examDate, dailyTarget, cards:[] } ]
   fcSession: null,     // saved mid-session progress (synced to cloud for cross-device resume)
   fcSessionTrash: [],  // undo buffer for cleared sessions
-  cloudSyncEnabled: !IS_DESKTOP_APP,
+  cloudSyncEnabled: true,
   cloudSync: { state: 'idle', retryAt: null, lastError: null, lastSuccessAt: null },
   clientRevision: 0,
   errorLog: [],        // [ { id, date, subject, paper, mistakes: [{ id, desc, marks, topicId, topicName, fixed }] } ]
@@ -45,6 +42,18 @@ const S = {
 const $ = id => document.getElementById(id);
 const todayKey = () => new Date().toISOString().split('T')[0];
 const uid = () => Math.random().toString(36).slice(2, 9);
+let saveTimer = null;
+let pendingSavePayload = null;
+
+function flushSaveNow() {
+  if (!pendingSavePayload) return;
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+  }
+  localStorage.setItem('hf_gcse', pendingSavePayload);
+  pendingSavePayload = null;
+}
 
 function save(options = {}) {
   try {
@@ -58,7 +67,15 @@ function save(options = {}) {
     if (Array.isArray(S.flashcardDecks)) {
       slim.flashcardDecks = S.flashcardDecks.map(({ media, ...rest }) => rest);
     }
-    localStorage.setItem('hf_gcse', JSON.stringify(slim));
+    pendingSavePayload = JSON.stringify(slim);
+    if (options.immediate) {
+      flushSaveNow();
+      return;
+    }
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+      flushSaveNow();
+    }, 120);
   } catch(e) {
     toast('Could not save — browser storage is full', 'err');
   }
@@ -93,7 +110,7 @@ function load() {
   if (!Array.isArray(S.focusLog)) S.focusLog = [];
   if (!Array.isArray(S.errorLog)) S.errorLog = [];
   if (!Array.isArray(S.fcSessionTrash)) S.fcSessionTrash = [];
-  if (S.cloudSyncEnabled == null) S.cloudSyncEnabled = !IS_DESKTOP_APP;
+  if (S.cloudSyncEnabled == null) S.cloudSyncEnabled = true;
   if (!S.cloudSync || typeof S.cloudSync !== 'object') {
     S.cloudSync = { state: 'idle', retryAt: null, lastError: null, lastSuccessAt: null };
   }
@@ -2194,6 +2211,10 @@ async function init() {
 
   // Refresh topbar date every minute
   setInterval(initTopbar, 60000);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') flushSaveNow();
+  });
+  window.addEventListener('pagehide', flushSaveNow);
 }
 
 document.addEventListener('DOMContentLoaded', init);
