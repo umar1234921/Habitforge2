@@ -661,7 +661,7 @@ function performDeleteDeck(id, { keepSession = false, discardSession = false } =
   }
   S.flashcardDecks = (S.flashcardDecks || []).filter(d => d.id !== id);
   MediaDB.delete(id).catch(e => console.warn('[media IDB delete]', e));
-  save();
+  save({ immediate: true });
   renderFCDecks();
   toast(keepSession ? 'Deck deleted — session preserved' : 'Deck deleted');
 }
