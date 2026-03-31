@@ -1,0 +1,46 @@
+{
+  "name": "habitforge2",
+  "version": "1.0.0",
+  "description": "HabitForge GCSE — offline-first study dashboard",
+  "main": "electron/main.js",
+  "scripts": {
+    "desktop:dev": "electron .",
+    "desktop:build": "electron-builder"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/umar1234921/Habitforge2.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/umar1234921/Habitforge2/issues"
+  },
+  "homepage": "https://github.com/umar1234921/Habitforge2#readme",
+  "devDependencies": {
+    "electron": "29.1.0",
+    "electron-builder": "24.13.3"
+  },
+  "build": {
+    "appId": "com.habitforge.gcse",
+    "productName": "HabitForge GCSE",
+    "files": [
+      "**/*",
+      "!node_modules/**/*",
+      "!dist/**/*",
+      "!out/**/*",
+      "!release/**/*"
+    ],
+    "mac": {
+      "target": ["dmg", "zip"]
+    },
+    "win": {
+      "target": ["nsis"]
+    },
+    "linux": {
+      "target": ["AppImage", "deb"]
+    }
+  }
+}

@@ -3,6 +3,9 @@
    ================================================================ */
 
 // ─── STATE ────────────────────────────────────────────────
+const IS_DESKTOP_APP = !!window.habitforgeEnv?.isElectron ||
+  (typeof window !== 'undefined' && !!window.process?.versions?.electron) ||
+  /Electron/i.test(navigator.userAgent || '');
 const S = {
   mastered: {},        // { "subjectKey:topicId:pointIdx": true }
   specAmber: {},       // { "subjectKey:topicId:pointIdx": true } — amber/learning state
@@ -23,6 +26,10 @@ const S = {
   sleepLog: [],        // [ { id, date, preSleep, duration, grogginess, postSleep, notes } ]
   flashcardDecks: [],  // [ { id, name, subject, examDate, dailyTarget, cards:[] } ]
   fcSession: null,     // saved mid-session progress (synced to cloud for cross-device resume)
+  fcSessionTrash: [],  // undo buffer for cleared sessions
+  cloudSyncEnabled: !IS_DESKTOP_APP,
+  cloudSync: { state: 'idle', retryAt: null, lastError: null, lastSuccessAt: null },
+  clientRevision: 0,
   errorLog: [],        // [ { id, date, subject, paper, mistakes: [{ id, desc, marks, topicId, topicName, fixed }] } ]
   quickLinks: [
     { emoji: '🔗', label: '', url: '' },
@@ -39,8 +46,12 @@ const $ = id => document.getElementById(id);
 const todayKey = () => new Date().toISOString().split('T')[0];
 const uid = () => Math.random().toString(36).slice(2, 9);
 
-function save() {
+function save(options = {}) {
   try {
+    if (options.bumpRevision !== false) {
+      if (!Number.isFinite(S.clientRevision)) S.clientRevision = 0;
+      S.clientRevision += 1;
+    }
     // Media (base64 images) is stored in IndexedDB, not localStorage, to avoid
     // the 5 MB quota limit.  Always strip it before writing to localStorage.
     const slim = { ...S };
@@ -81,6 +92,12 @@ function load() {
   if (!S.specAmber || typeof S.specAmber !== 'object') S.specAmber = {};
   if (!Array.isArray(S.focusLog)) S.focusLog = [];
   if (!Array.isArray(S.errorLog)) S.errorLog = [];
+  if (!Array.isArray(S.fcSessionTrash)) S.fcSessionTrash = [];
+  if (S.cloudSyncEnabled == null) S.cloudSyncEnabled = !IS_DESKTOP_APP;
+  if (!S.cloudSync || typeof S.cloudSync !== 'object') {
+    S.cloudSync = { state: 'idle', retryAt: null, lastError: null, lastSuccessAt: null };
+  }
+  if (!Number.isFinite(S.clientRevision)) S.clientRevision = 0;
 }
 function fmt(sec) {
   return `${String(Math.floor(sec/60)).padStart(2,'0')}:${String(sec%60).padStart(2,'0')}`;
