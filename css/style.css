@@ -1573,6 +1573,24 @@ body::before {
 .modal-cls:hover { color: var(--text); }
 .modal-bd { padding: 22px; display: flex; flex-direction: column; gap: 14px; }
 .modal-ft { padding: 14px 22px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 10px; }
+.fc-delete-deck-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+}
+.fc-delete-deck-note {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-3);
+}
+.fc-delete-danger {
+  border-color: var(--accent-5);
+  color: var(--accent-5);
+}
+.fc-delete-danger:hover {
+  color: var(--accent-5);
+  border-color: var(--accent-5);
+}
 .fg { display: flex; flex-direction: column; gap: 5px; }
 .fr { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 .field-label {
@@ -2107,6 +2125,29 @@ body::before {
   width: 100%;
   font-size: 10px;
   letter-spacing: 1px;
+}
+.sync-btn:disabled {
+  opacity: .6;
+  cursor: not-allowed;
+}
+.sync-toggle {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--f-mono);
+  font-size: 9px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.sync-toggle input {
+  accent-color: var(--accent);
+}
+.sync-status {
+  margin-top: 6px;
+  font-size: 9px;
+  color: var(--text-3);
 }
 
 /* ================================================================

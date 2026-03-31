@@ -291,6 +291,132 @@ function _interleaveByKey(cards, keyFn) {
 // ─── SESSION PROGRESS PERSISTENCE ────────────────────────
 // Session state is stored in S.fcSession so that it is included in the
 // regular save() / cloud sync cycle and persists across devices.
+const FC_SESSION_TRASH_LIMIT = 8;
+
+function fcCloneSession(sess) {
+  try { return JSON.parse(JSON.stringify(sess)); } catch (e) { return null; }
+}
+
+function fcSessionDeckIds(sess) {
+  if (!sess) return [];
+  if (sess.interleaved) {
+    const ids = new Set();
+    (sess.queueIds || []).forEach(entry => {
+      if (entry && entry._deckId) ids.add(entry._deckId);
+    });
+    return [...ids];
+  }
+  return sess.deckId ? [sess.deckId] : [];
+}
+
+function updateRestoreSessionBtn() {
+  const btn = $('fc-restore-session-btn');
+  if (!btn) return;
+  const hasTrash = Array.isArray(S.fcSessionTrash) && S.fcSessionTrash.length > 0;
+  btn.classList.toggle('fc-hidden', !hasTrash);
+}
+
+function fcTrashSession(reason = 'cleared') {
+  const sess = S.fcSession;
+  if (!sess || sess.status === 'cleared' || sess.trashed) return;
+  if (!Array.isArray(S.fcSessionTrash)) S.fcSessionTrash = [];
+  const copy = fcCloneSession(sess);
+  if (!copy) return;
+  const meta = {
+    deckIds: fcSessionDeckIds(copy),
+    interleaved: !!copy.interleaved,
+    date: copy.date || null,
+  };
+  S.fcSessionTrash.unshift({
+    trashedAt: Date.now(),
+    reason,
+    session: copy,
+    meta,
+  });
+  if (S.fcSessionTrash.length > FC_SESSION_TRASH_LIMIT) {
+    S.fcSessionTrash.length = FC_SESSION_TRASH_LIMIT;
+  }
+  updateRestoreSessionBtn();
+}
+
+function fcClearSavedSession(reason = 'cleared') {
+  try {
+    fcTrashSession(reason);
+    if (S.fcSession && typeof S.fcSession === 'object') {
+      S.fcSession = { status: 'cleared', clearedAt: Date.now(), reason };
+    }
+    save();
+  } catch(e) {}
+}
+
+function fcDiscardSession(reason = 'discarded', options = {}) {
+  try {
+    S.fcSession = null;
+    if (!options.skipSave) save();
+  } catch(e) {}
+}
+
+function fcRestoreLastSession() {
+  try {
+    if (!Array.isArray(S.fcSessionTrash) || !S.fcSessionTrash.length) {
+      toast('No saved sessions to restore', 'info');
+      return;
+    }
+    if (S.fcSession && Array.isArray(S.fcSession.queueIds) && S.fcSession.queueIds.length) {
+      fcTrashSession('restore-overwrite');
+    }
+    const entry = S.fcSessionTrash.shift();
+    const restored = entry ? (fcCloneSession(entry.session) || entry.session) : null;
+    if (!restored) {
+      updateRestoreSessionBtn();
+      save();
+      return;
+    }
+    delete restored.status;
+    delete restored.trashed;
+    S.fcSession = restored;
+    save();
+    updateRestoreSessionBtn();
+    renderFCDecks();
+    const missingDecks = (entry?.meta?.deckIds || []).filter(id =>
+      !(S.flashcardDecks || []).some(d => d.id === id)
+    );
+    if (missingDecks.length) {
+      toast('Session restored, but some decks are missing. Missing cards will be skipped.', 'info');
+    } else {
+      toast('Session restored — open the deck to resume.', 'info');
+    }
+  } catch(e) {}
+}
+
+function fcSessionReferencesDeck(deckId) {
+  const sess = S.fcSession;
+  if (!sess || sess.status === 'cleared' || sess.trashed) return false;
+  if (sess.interleaved) {
+    return Array.isArray(sess.queueIds) && sess.queueIds.some(entry => entry && entry._deckId === deckId);
+  }
+  return sess.deckId === deckId;
+}
+
+function markSessionDeckDeleted(deckId, deckName) {
+  if (!S.fcSession || typeof S.fcSession !== 'object') return;
+  const prev = S.fcSession.degraded || {};
+  const missingDeckIds = new Set(Array.isArray(prev.missingDeckIds) ? prev.missingDeckIds : []);
+  if (deckId) missingDeckIds.add(deckId);
+  S.fcSession.degraded = {
+    reason: 'deck-deleted',
+    degradedAt: Date.now(),
+    missingDeckIds: [...missingDeckIds],
+    missingDeckNames: [
+      ...new Set([...(prev.missingDeckNames || []), deckName].filter(Boolean))
+    ],
+  };
+}
+
+function clampSessionIdx(idx, length) {
+  const safeIdx = Number.isFinite(idx) ? idx : 0;
+  return Math.max(0, Math.min(safeIdx, Math.max(0, length)));
+}
 
 function fcSaveSessionProgress() {
   try {
@@ -299,6 +425,7 @@ function fcSaveSessionProgress() {
     const queueIds = _fcInterleaveMode
       ? _fcStudyQueue.map(c => ({ id: c.id, _deckId: c._deckId }))
       : _fcStudyQueue.map(c => c.id);
+    const degraded = S.fcSession && S.fcSession.degraded ? fcCloneSession(S.fcSession.degraded) : null;
     S.fcSession = {
       deckId:      _fcCurrentDeckId,
       subdeck:     _fcCurrentSubdeck,
@@ -308,6 +435,7 @@ function fcSaveSessionProgress() {
       idx:         _fcStudyIdx,
       stats:       { ..._fcSessionStats },
       againCounts: { ..._fcSessionAgainCounts },
+      degraded,
     };
     save();
   } catch(e) {}
@@ -316,14 +444,15 @@ function fcSaveSessionProgress() {
 function fcLoadSavedSession(deckId, subdeckName) {
   try {
     const sess = S.fcSession;
-    if (!sess) return null;
+    if (!sess || sess.status === 'cleared' || sess.trashed) return null;
     if (
       sess.deckId === deckId &&
       (sess.subdeck || null) === (subdeckName || null) &&
       sess.date === todayLocalKey() &&
+      Number.isFinite(sess.idx) &&
       sess.idx > 0 &&
       Array.isArray(sess.queueIds) &&
-      sess.idx < sess.queueIds.length
+      sess.queueIds.length > 0
     ) return sess;
   } catch(e) {}
   return null;
@@ -332,21 +461,18 @@ function fcLoadSavedSession(deckId, subdeckName) {
 function fcLoadSavedInterleavedSession() {
   try {
     const sess = S.fcSession;
-    if (!sess) return null;
+    if (!sess || sess.status === 'cleared' || sess.trashed) return null;
     if (
       sess.interleaved === true &&
       sess.deckId === null &&
       sess.date === todayLocalKey() &&
+      Number.isFinite(sess.idx) &&
       sess.idx > 0 &&
       Array.isArray(sess.queueIds) &&
-      sess.idx < sess.queueIds.length
+      sess.queueIds.length > 0
     ) return sess;
   } catch(e) {}
   return null;
-}
-
-function fcClearSavedSession() {
-  try { S.fcSession = null; save(); } catch(e) {}
 }
 
 // ─── PANEL NAVIGATION ─────────────────────────────────────
@@ -377,6 +503,7 @@ function subdeckDueCount(deck, subdeckName) {
 function renderFCDecks() {
   const filterSubject = $('fc-subject-filter') ? $('fc-subject-filter').value : '';
   let decks = S.flashcardDecks || [];
+  updateRestoreSessionBtn();
 
   // Header summary
   let totalDue = 0;
@@ -508,13 +635,47 @@ function renderFCDecks() {
     btn.addEventListener('click', () => deleteDeck(btn.dataset.id)));
 }
 
-function deleteDeck(id) {
-  if (!confirm('Delete this deck and all its cards?')) return;
+let _fcPendingDeleteDeckId = null;
+
+function openDeleteDeckModal(deck) {
+  const modal = $('fc-delete-deck-modal');
+  if (!modal || !deck) return;
+  _fcPendingDeleteDeckId = deck.id;
+  const nameEl = $('fc-delete-deck-name');
+  if (nameEl) nameEl.textContent = deck.name;
+  modal.classList.add('open');
+}
+
+function closeDeleteDeckModal() {
+  const modal = $('fc-delete-deck-modal');
+  if (modal) modal.classList.remove('open');
+  _fcPendingDeleteDeckId = null;
+}
+
+function performDeleteDeck(id, { keepSession = false, discardSession = false } = {}) {
+  const deck = (S.flashcardDecks || []).find(d => d.id === id);
+  if (!deck) return;
+  if (discardSession) {
+    fcDiscardSession('deck-deleted', { skipSave: true });
+  } else if (keepSession) {
+    markSessionDeckDeleted(deck.id, deck.name);
+  }
   S.flashcardDecks = (S.flashcardDecks || []).filter(d => d.id !== id);
   MediaDB.delete(id).catch(e => console.warn('[media IDB delete]', e));
   save();
   renderFCDecks();
-  toast('Deck deleted');
+  toast(keepSession ? 'Deck deleted — session preserved' : 'Deck deleted');
+}
+
+function deleteDeck(id) {
+  const deck = (S.flashcardDecks || []).find(d => d.id === id);
+  if (!deck) return;
+  if (fcSessionReferencesDeck(id)) {
+    openDeleteDeckModal(deck);
+    return;
+  }
+  if (!confirm('Delete this deck and all its cards?')) return;
+  performDeleteDeck(id);
 }
 
 // ─── NEW DECK MODAL ───────────────────────────────────────
@@ -698,7 +859,7 @@ function makeFlashcard(front, back) {
 }
 
 // ─── STUDY SESSION ────────────────────────────────────────
-function _fcStartFresh(deck, due) {
+function _fcStartFresh(deck, due, options = {}) {
   let queue;
   if (deck.examMode && deck.examDate) {
     queue = [...due]; // preserve priority order for exam mode
@@ -715,7 +876,9 @@ function _fcStartFresh(deck, due) {
   _fcFlipped            = false;
   _fcSessionStats       = { again: 0, hard: 0, good: 0, easy: 0 };
   _fcSessionAgainCounts = {};
-  fcClearSavedSession();
+  if (options.clearSession !== false) {
+    fcClearSavedSession('start-fresh');
+  }
 }
 
 async function startStudySession(deckId, subdeckName) {
@@ -754,17 +917,22 @@ async function startStudySession(deckId, subdeckName) {
     : deck.name;
 
   // Check for saved mid-session progress (matched by both deck id and subdeck)
+  let skipClearForMissing = false;
   const savedSess = fcLoadSavedSession(deckId, _fcCurrentSubdeck);
   if (savedSess) {
     const cardMap = Object.fromEntries(deckForStudy.cards.map(c => [c.id, c]));
     const rebuiltQueue = savedSess.queueIds.map(id => cardMap[id]).filter(Boolean);
-    const remaining = rebuiltQueue.length - savedSess.idx;
+    const totalQueued  = Array.isArray(savedSess.queueIds) ? savedSess.queueIds.length : 0;
+    const missingCount = Math.max(0, totalQueued - rebuiltQueue.length);
+    const safeIdx      = clampSessionIdx(savedSess.idx, rebuiltQueue.length);
+    const remaining    = Math.max(0, rebuiltQueue.length - safeIdx);
     if (remaining > 0) {
       $('fc-study-deck-name').textContent = displayName;
       $('fc-card-wrap').classList.add('fc-hidden');
       $('fc-session-complete').classList.add('fc-hidden');
       $('fc-resume-sub').textContent =
-        `You reviewed ${savedSess.idx} of ${rebuiltQueue.length} card${rebuiltQueue.length !== 1 ? 's' : ''} — ${remaining} left to go.`;
+        `You reviewed ${safeIdx} of ${rebuiltQueue.length} card${rebuiltQueue.length !== 1 ? 's' : ''} — ${remaining} left to go.` +
+        (missingCount ? ' Some cards were missing (deck deleted).' : '');
       $('fc-resume-prompt').classList.remove('fc-hidden');
       $('fc-back-to-manage').textContent = '← DECK';
       fcShowPanel('study');
@@ -772,12 +940,15 @@ async function startStudySession(deckId, subdeckName) {
       const onResume = () => {
         cleanup();
         _fcStudyQueue         = rebuiltQueue;
-        _fcStudyIdx           = savedSess.idx;
+        _fcStudyIdx           = safeIdx;
         _fcFlipped            = false;
-        _fcSessionStats       = { ...savedSess.stats };
-        _fcSessionAgainCounts = { ...savedSess.againCounts };
+        _fcSessionStats       = { ...(savedSess.stats || { again: 0, hard: 0, good: 0, easy: 0 }) };
+        _fcSessionAgainCounts = { ...(savedSess.againCounts || {}) };
         $('fc-resume-prompt').classList.add('fc-hidden');
         $('fc-card-wrap').classList.remove('fc-hidden');
+        if (missingCount) {
+          toast(`Some cards missing (deck deleted). Resumed with ${remaining} remaining.`, 'info');
+        }
         renderStudyCard();
       };
       const onFresh = () => {
@@ -795,11 +966,17 @@ async function startStudySession(deckId, subdeckName) {
       $('fc-resume-no').addEventListener('click', onFresh);
       return;
     }
+    if (missingCount) {
+      toast('Some cards missing from your previous session. Starting fresh.', 'info');
+      skipClearForMissing = true;
+    } else {
+      fcClearSavedSession('resume-empty');
+    }
   }
 
   // Fresh start
   _fcInterleaveMode = false;
-  _fcStartFresh(deckForStudy, due);
+  _fcStartFresh(deckForStudy, due, { clearSession: !skipClearForMissing });
   $('fc-study-deck-name').textContent = displayName;
   $('fc-back-to-manage').textContent  = '← DECK';
   $('fc-session-complete').classList.add('fc-hidden');
@@ -828,6 +1005,7 @@ async function startInterleavedSession() {
   } catch (e) { console.warn('[interleave media IDB]', e); }
 
   // Check for a saved interleaved session from today and offer to resume it
+  let skipClearForMissing = false;
   const savedSess = fcLoadSavedInterleavedSession();
   if (savedSess) {
     // Rebuild the queue from saved {id, _deckId} pairs, looking up each card in
@@ -842,7 +1020,10 @@ async function startInterleavedSession() {
     const rebuiltQueue = savedSess.queueIds
       .map(entry => cardByKey[`${entry._deckId}:${entry.id}`] || null)
       .filter(Boolean);
-    const remaining = rebuiltQueue.length - savedSess.idx;
+    const totalQueued  = Array.isArray(savedSess.queueIds) ? savedSess.queueIds.length : 0;
+    const missingCount = Math.max(0, totalQueued - rebuiltQueue.length);
+    const safeIdx      = clampSessionIdx(savedSess.idx, rebuiltQueue.length);
+    const remaining    = Math.max(0, rebuiltQueue.length - safeIdx);
     if (remaining > 0) {
       _fcInterleaveMode = true;
       _fcCurrentDeckId  = null;
@@ -852,7 +1033,8 @@ async function startInterleavedSession() {
       $('fc-card-wrap').classList.add('fc-hidden');
       $('fc-session-complete').classList.add('fc-hidden');
       $('fc-resume-sub').textContent =
-        `You reviewed ${savedSess.idx} of ${rebuiltQueue.length} card${rebuiltQueue.length !== 1 ? 's' : ''} — ${remaining} left to go.`;
+        `You reviewed ${safeIdx} of ${rebuiltQueue.length} card${rebuiltQueue.length !== 1 ? 's' : ''} — ${remaining} left to go.` +
+        (missingCount ? ' Some cards were missing (deck deleted).' : '');
       $('fc-resume-prompt').classList.remove('fc-hidden');
       fcShowPanel('study');
 
@@ -863,27 +1045,38 @@ async function startInterleavedSession() {
       const onResume = () => {
         cleanup();
         _fcStudyQueue         = rebuiltQueue;
-        _fcStudyIdx           = savedSess.idx;
+        _fcStudyIdx           = safeIdx;
         _fcFlipped            = false;
-        _fcSessionStats       = { ...savedSess.stats };
-        _fcSessionAgainCounts = { ...savedSess.againCounts };
+        _fcSessionStats       = { ...(savedSess.stats || { again: 0, hard: 0, good: 0, easy: 0 }) };
+        _fcSessionAgainCounts = { ...(savedSess.againCounts || {}) };
         $('fc-resume-prompt').classList.add('fc-hidden');
         $('fc-card-wrap').classList.remove('fc-hidden');
+        if (missingCount) {
+          toast(`Some cards missing (deck deleted). Resumed with ${remaining} remaining.`, 'info');
+        }
         renderStudyCard();
       };
       const onFresh = () => {
         cleanup();
         $('fc-resume-prompt').classList.add('fc-hidden');
-        fcClearSavedSession();
+        fcClearSavedSession('start-fresh');
         _launchFreshInterleavedSession(allDecks);
       };
       $('fc-resume-yes').addEventListener('click', onResume);
       $('fc-resume-no').addEventListener('click', onFresh);
       return;
     }
+    if (missingCount) {
+      toast('Some cards missing from your previous session. Starting fresh.', 'info');
+      skipClearForMissing = true;
+    } else {
+      fcClearSavedSession('resume-empty');
+    }
   }
 
-  fcClearSavedSession();
+  if (!skipClearForMissing) {
+    fcClearSavedSession('start-fresh');
+  }
   _launchFreshInterleavedSession(allDecks);
 }
 
@@ -1036,7 +1229,7 @@ function gradeCard(g) {
 }
 
 function showSessionComplete() {
-  fcClearSavedSession();
+  fcClearSavedSession('completed');
   // Update streak for the current deck
   const deck = fcCurrentDeck();
   if (deck) {
@@ -1636,6 +1829,31 @@ function initFlashcards() {
   // Subject filter
   const filterEl = $('fc-subject-filter');
   if (filterEl) filterEl.addEventListener('change', renderFCDecks);
+
+  // Restore last session
+  const restoreBtn = $('fc-restore-session-btn');
+  if (restoreBtn) restoreBtn.addEventListener('click', fcRestoreLastSession);
+  updateRestoreSessionBtn();
+
+  // Delete deck modal
+  const deleteModal = $('fc-delete-deck-modal');
+  if (deleteModal) {
+    deleteModal.addEventListener('click', e => {
+      if (e.target === deleteModal) closeDeleteDeckModal();
+    });
+  }
+  $('fc-delete-deck-close')?.addEventListener('click', closeDeleteDeckModal);
+  $('fc-delete-deck-cancel')?.addEventListener('click', closeDeleteDeckModal);
+  $('fc-delete-deck-keep')?.addEventListener('click', () => {
+    const deckId = _fcPendingDeleteDeckId;
+    closeDeleteDeckModal();
+    if (deckId) performDeleteDeck(deckId, { keepSession: true });
+  });
+  $('fc-delete-deck-discard')?.addEventListener('click', () => {
+    const deckId = _fcPendingDeleteDeckId;
+    closeDeleteDeckModal();
+    if (deckId) performDeleteDeck(deckId, { discardSession: true });
+  });
 
   // Manage panel
   $('fc-back-to-decks').addEventListener('click', () => {
