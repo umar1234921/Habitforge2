@@ -364,6 +364,8 @@ async function fbSaveMedia(uid, decks) {
     if (!names.length) continue;
     const sig = mediaSignature(deck.media);
     if (mediaSyncSignatures.get(deck.id) === sig) continue;
+    // Skip re-attempting deck media when this exact payload signature already
+    // exhausted its MAX_MEDIA_DECK_SAVE_ATTEMPTS budget in a previous save cycle.
     if (mediaSyncFailures.get(deck.id) === sig) continue;
 
     const chunks = splitMediaChunks(deck.media);
@@ -418,7 +420,7 @@ async function fbSaveMedia(uid, decks) {
     mediaSyncFailures.delete(deck.id);
   }
   if (newlyFailedDeckIds.length && typeof toast === 'function') {
-    toast(`Cloud media upload skipped for ${newlyFailedDeckIds.length} oversized/problem deck(s) after ${MAX_MEDIA_DECK_SAVE_ATTEMPTS} attempts.`, 'info');
+    toast(`Cloud media upload failed for ${newlyFailedDeckIds.length} deck(s) after ${MAX_MEDIA_DECK_SAVE_ATTEMPTS} attempts. Future uploads are skipped until that deck changes. Check your connection or edit the deck to retry.`, 'info');
   }
 }
 
