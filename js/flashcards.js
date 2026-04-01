@@ -97,6 +97,7 @@ const FC_AI_TUTOR_TIMEOUT_MS = 15000;
 const FC_AI_TUTOR_MODEL = 'gemma-3-27b-it';
 const FC_AI_TUTOR_TEMPERATURE = 0.3;
 const FC_AI_TUTOR_MAX_TOKENS = 2500;
+const FC_AI_TUTOR_ERROR_DETAIL_MAX_CHARS = 300;
 const FC_SUBJECT_CTX_MAX_TOPICS = 6;
 const FC_SUBJECT_CTX_MAX_POINTS = 3;
 
@@ -356,9 +357,6 @@ function fcGeminiApiKey() {
     window.HF_GEMINI_API_KEY ||
     window.GEMINI_API_KEY ||
     window.hfGeminiApiKey ||
-    window.HF_OPENROUTER_API_KEY ||
-    window.OPENROUTER_API_KEY ||
-    window.hfOpenRouterApiKey ||
     ''
   ).trim();
 }
@@ -397,15 +395,14 @@ function fcBuildTutorPrompt(card, deck) {
   const deckName = deck && deck.name ? deck.name : (_fcInterleaveMode ? (card._deckName || 'Interleaved') : 'Deck');
   const subjectCtx = fcSubjectContext(deck);
   return [
-    'You are a GCSE tutor.',
-    'Explain this flashcard to a student who knows absolutely nothing about the topic.',
-    'Keep language very simple and avoid jargon.',
-    'Use this exact structure:',
-    '1) Plain-English idea (2-3 lines)',
-    '2) Why it matters for GCSE',
-    '3) Tiny worked example',
-    '4) One common mistake',
-    '5) One quick check question (with answer hidden after "Answer:")',
+    'Role: You are the HabitForge automated tutor.',
+    'You will be provided with a flashcard (Front/Back). Your job is to explain why the answer is correct and provide context to help the user memorize it.',
+    'Instructions:',
+    '1) Analyze: Look at the Front and Back of the card.',
+    '2) Explain: Break down the concept in 2-3 concise sentences.',
+    '3) Memory Hook: Provide a one-sentence mnemonic or real-world example.',
+    '4) Format: Use bolding for key scientific or technical terms.',
+    '5) Constraint: Do not ask the user for more information. Just explain the content provided.',
     '',
     `Deck: ${deckName}`,
     `Flashcard question: ${card.front || ''}`,
@@ -475,13 +472,14 @@ async function explainCurrentCardWithAi() {
   _fcAiTutorAbort = controller;
   const timeout = setTimeout(() => controller.abort(), FC_AI_TUTOR_TIMEOUT_MS);
 
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(FC_AI_TUTOR_MODEL)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(FC_AI_TUTOR_MODEL)}:generateContent`;
 
   try {
     const res = await fetch(endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'x-goog-api-key': apiKey,
       },
       body: JSON.stringify({
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
@@ -492,7 +490,12 @@ async function explainCurrentCardWithAi() {
       }),
       signal: controller.signal,
     });
-    if (!res.ok) throw new Error(`Gemini request failed (${res.status})`);
+    if (!res.ok) {
+      let errBody = '';
+      try { errBody = await res.text(); } catch (e) {}
+      const errDetail = errBody ? ` ${errBody.slice(0, FC_AI_TUTOR_ERROR_DETAIL_MAX_CHARS)}` : '';
+      throw new Error(`Gemini request failed (${res.status} ${res.statusText}).${errDetail}`);
+    }
     const data = await res.json();
     console.log("Gemini API Response:", data);
     const text = fcExtractAiText(data);
