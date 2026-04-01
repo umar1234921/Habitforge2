@@ -20,6 +20,7 @@ export async function onRequestPost(context) {
       headers: { 'Content-Type': 'application/json' },
     });
   } catch (error) {
+    console.error('[ask-ai] proxy failure', error);
     return new Response(JSON.stringify({ error: 'Failed to proxy AI request.' }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
