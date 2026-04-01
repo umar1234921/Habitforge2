@@ -1186,6 +1186,9 @@
   <!-- Toast -->
   <div id="toast" class="toast"></div>
 
+  <script type="module">
+    window.HF_GEMINI_API_KEY_FROM_ENV = import.meta.env.VITE_HF_GEMINI_API_KEY || '';
+  </script>
   <script src="js/gcse-data.js"></script>
   <script src="js/flashcards.js"></script>
   <script src="js/app.js"></script>
