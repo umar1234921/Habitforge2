@@ -450,7 +450,7 @@ async function explainCurrentCardWithAi() {
   const apiKey = fcGeminiApiKey();
   if (!apiKey) {
     fcSetAiStatus('AI Tutor unavailable: Gemini API key not found.');
-    toast('Set VITE_HF_GEMINI_API_KEY in Cloudflare Pages Environment Variables (Secrets).', 'info');
+    toast('Set VITE_HF_GEMINI_API_KEY in Cloudflare Pages Secrets (prod) or .env.local (local). See README.', 'info');
     return;
   }
 
