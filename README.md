@@ -8,14 +8,12 @@ npm install
 npm run web:dev
 ```
 
-### Optional: AI Tutor mode (OpenRouter)
+### Optional: AI Tutor mode (Gemini)
 Create a local gitignored file at `/js/local-config.js`:
 ```js
-window.HF_OPENROUTER_API_KEY = 'your-openrouter-api-key';
-window.HF_OPENROUTER_HTTP_REFERER = 'https://your-site.example.com'; // optional (defaults to window.location.origin)
-window.HF_OPENROUTER_TITLE = 'Your App Name';
+window.HF_GEMINI_API_KEY = 'your-gemini-api-key';
 ```
-Then use **AI Tutor Mode** inside flashcard study to get beginner-friendly explanations with deck + GCSE context.
+Then use **AI Tutor Mode** inside flashcard study to get concise explanations and memory hooks from the card’s Front/Back content.
 Use a restricted key (API and quota limits) because this app runs client-side. For stronger key security, route requests through your own backend proxy.
 
 Cloud sync is optional and can be enabled with the sidebar toggle
