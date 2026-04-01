@@ -9,8 +9,18 @@ npm run web:dev
 ```
 
 ### Optional: AI Tutor mode (Gemini)
-Use a gitignored env file instead of committing keys:
+Use environment variables/secrets instead of committing keys.
 
+#### Cloudflare Pages (production)
+1. Open your Cloudflare Pages project
+2. Go to **Settings → Environment variables**
+3. Add a **Secret** named:
+```bash
+VITE_HF_GEMINI_API_KEY
+```
+4. Redeploy the project
+
+#### Local development
 1. Create `.env.local` in the project root
 2. Add:
 ```bash
@@ -21,10 +31,8 @@ VITE_HF_GEMINI_API_KEY=your-gemini-api-key
 npm run web:dev
 ```
 
-Legacy fallback still works via `/js/local-config.js`, but prefer `.env.local`.
-
 #### How to stop key revocation from happening again
-- **Never commit keys**: keep them only in `.env.local` (already gitignored).
+- **Never commit keys**: keep them only in Cloudflare Pages secrets or local `.env.local` (already gitignored).
 - **Use restricted keys** in Google AI Studio:
   - API restriction: Generative Language API only
   - Tight quota limits

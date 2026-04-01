@@ -355,9 +355,6 @@ function fcPrepareAiTutor(card, deck) {
 function fcGeminiApiKey() {
   return (
     window.HF_GEMINI_API_KEY_FROM_ENV ||
-    window.HF_GEMINI_API_KEY ||
-    window.GEMINI_API_KEY ||
-    window.hfGeminiApiKey ||
     ''
   ).trim();
 }
@@ -365,12 +362,6 @@ function fcGeminiApiKey() {
 async function fcEnsureAiConfigLoaded() {
   if (_fcAiConfigLoadTried) return;
   _fcAiConfigLoadTried = true;
-  if (fcGeminiApiKey()) return;
-  try {
-    await loadScript('/js/local-config.js');
-  } catch (e) {
-    // Optional local config file may not exist in repository.
-  }
 }
 
 function fcSubjectContext(deck) {
@@ -459,7 +450,7 @@ async function explainCurrentCardWithAi() {
   const apiKey = fcGeminiApiKey();
   if (!apiKey) {
     fcSetAiStatus('AI Tutor unavailable: Gemini API key not found.');
-    toast('Set HF_GEMINI_API_KEY in .env.local and run npm run web:dev (see README).', 'info');
+    toast('Set VITE_HF_GEMINI_API_KEY in Cloudflare Pages Secrets (prod) or .env.local (local). See README.', 'info');
     return;
   }
 
