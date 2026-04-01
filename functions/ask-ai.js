@@ -9,12 +9,25 @@ export async function onRequestPost(context) {
 
   try {
     const body = await context.request.json();
+    if (!body || typeof body !== 'object' || !Array.isArray(body.contents)) {
+      return new Response(JSON.stringify({ error: 'Invalid request body.' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
     const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
-    const data = await res.json();
+    const raw = await res.text();
+    let data;
+    try {
+      data = raw ? JSON.parse(raw) : {};
+    } catch (e) {
+      data = { error: raw || 'Unexpected upstream response format.' };
+    }
     return new Response(JSON.stringify(data), {
       status: res.status,
       headers: { 'Content-Type': 'application/json' },
