@@ -74,6 +74,23 @@ function todayLocalKey() {
   return dateToKey(new Date());
 }
 
+function fcMarkDeckStudiedToday(deck) {
+  if (!deck) return;
+  const today = todayLocalKey();
+  const yest = new Date();
+  yest.setDate(yest.getDate() - 1);
+  const yesterday = dateToKey(yest);
+  if (deck.lastStudiedDate === today) {
+    return;
+  } else if (deck.lastStudiedDate === yesterday) {
+    deck.streak = (deck.streak || 0) + 1;
+    deck.lastStudiedDate = today;
+  } else {
+    deck.streak = 1;
+    deck.lastStudiedDate = today;
+  }
+}
+
 // Duration of the card flip CSS transition (must match .fc-card-inner transition in style.css)
 const FC_FLIP_DURATION_MS = 300;
 const FC_AI_TUTOR_TIMEOUT_MS = 15000;
@@ -1484,22 +1501,17 @@ function showSessionComplete() {
     try { _fcAiTutorAbort.abort(); } catch(e) {}
     _fcAiTutorAbort = null;
   }
-  // Update streak for the current deck
+  // Update streaks/last-studied markers for decks covered in this session.
   const deck = fcCurrentDeck();
-  if (deck) {
-    const today = todayLocalKey();
-    const yest = new Date();
-    yest.setDate(yest.getDate() - 1);
-    const yesterday = dateToKey(yest);
-    if (deck.lastStudiedDate === today) {
-      // Already counted today — no change
-    } else if (deck.lastStudiedDate === yesterday) {
-      deck.streak = (deck.streak || 0) + 1;
-      deck.lastStudiedDate = today;
-    } else {
-      deck.streak = 1;
-      deck.lastStudiedDate = today;
-    }
+  if (_fcInterleaveMode) {
+    const deckIds = new Set();
+    _fcStudyQueue.forEach(card => {
+      if (card && card._deckId) deckIds.add(card._deckId);
+    });
+    deckIds.forEach(id => fcMarkDeckStudiedToday(_fcDeckLookup?.get(id) || (S.flashcardDecks || []).find(d => d.id === id) || null));
+    save();
+  } else if (deck) {
+    fcMarkDeckStudiedToday(deck);
     save();
   }
 
