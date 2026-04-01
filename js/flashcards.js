@@ -447,12 +447,6 @@ async function explainCurrentCardWithAi() {
   if (_fcAiTutorInFlight) return;
 
   await fcEnsureAiConfigLoaded();
-  const apiKey = fcGeminiApiKey();
-  if (!apiKey) {
-    fcSetAiStatus('AI Tutor unavailable: Gemini API key not found.');
-    toast('Set VITE_HF_GEMINI_API_KEY in Cloudflare Pages Secrets (prod) or .env.local (local). See README.', 'info');
-    return;
-  }
 
   _fcAiTutorInFlight = true;
   const btn = $('fc-ai-tutor-btn');
@@ -464,14 +458,13 @@ async function explainCurrentCardWithAi() {
   _fcAiTutorAbort = controller;
   const timeout = setTimeout(() => controller.abort(), FC_AI_TUTOR_TIMEOUT_MS);
 
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(FC_AI_TUTOR_MODEL)}:generateContent`;
+  const endpoint = '/ask-ai';
 
   try {
     const res = await fetch(endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-goog-api-key': apiKey,
       },
       body: JSON.stringify({
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
